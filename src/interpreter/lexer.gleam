@@ -10,16 +10,22 @@ type LexError {
   OrError(LexError, LexError)
   AnyError
   Labelled(LexError, String)
+  ShortCircuitAny(LexError)
 }
 
-fn error_to_string(error: LexError) -> String {
+fn lex_error_to_string(error: LexError) -> String {
   case error {
     TagError(tag) -> "tag(" <> tag <> ")"
     UntilError(until) -> "until(" <> until <> ")"
     OrError(first, second) ->
-      "(" <> error_to_string(first) <> ", " <> error_to_string(second) <> ")"
+      "("
+      <> lex_error_to_string(first)
+      <> ", "
+      <> lex_error_to_string(second)
+      <> ")"
     AnyError -> "any"
-    Labelled(error, label) -> error_to_string(error) <> " (" <> label <> ")"
+    Labelled(error, label) -> lex_error_to_string(error) <> " (" <> label <> ")"
+    ShortCircuitAny(error) -> lex_error_to_string(error)
   }
 }
 
@@ -147,7 +153,8 @@ fn comment(in: String) -> LexResult(Token) {
 
 fn string_literal(in: String) -> LexResult(Token) {
   use #(in, _) <- result.try(tag("\"")(in))
-  use #(in, contents) <- result.map(until("\"")(in))
+  let until_result = in |> until("\"") |> result.map_error(ShortCircuitAny)
+  use #(in, contents) <- result.map(until_result)
   #(in, Literal(LiteralString(contents)))
 }
 
@@ -170,15 +177,27 @@ pub fn scan(in: String) -> Return {
   tokenized_to_return(tokenize(in, matcher))
 }
 
+type TokenizedError {
+  UnexpectedChar(char: String)
+  Unterminated
+}
+
+fn tokenized_error_to_string(error: TokenizedError) -> String {
+  case error {
+    UnexpectedChar(char) -> "Unexpected character: " <> char
+    Unterminated -> "Unterminated string."
+  }
+}
+
 type Tokenized {
   Token(Token)
-  Unexpected(line: Int, char: String)
+  TokenizedError(line: Int, error: TokenizedError)
   Eof
 }
 
 fn tokenized_is_error(tokenized) -> Bool {
   case tokenized {
-    Unexpected(..) -> True
+    TokenizedError(..) -> True
     _ -> False
   }
 }
@@ -186,11 +205,11 @@ fn tokenized_is_error(tokenized) -> Bool {
 fn tokenized_to_string(tokenized: Tokenized) -> String {
   case tokenized {
     Token(token) -> token_to_string(token)
-    Unexpected(line, char) ->
+    TokenizedError(line, error) ->
       "[line "
       <> int.to_string(line)
-      <> "] Error: Unexpected character: "
-      <> char
+      <> "] Error: "
+      <> tokenized_error_to_string(error)
     Eof -> "EOF  null"
   }
 }
@@ -225,22 +244,44 @@ fn do_tokenize(
 ) -> List(Tokenized) {
   case in {
     "" -> [Eof, ..tokenized]
+
     _ -> {
       case matcher(in) {
         Ok(#(in, Comment)) | Ok(#(in, Basic(Space))) | Ok(#(in, Basic(Tab))) -> {
           do_tokenize(in, matcher, line, tokenized)
         }
+
         Ok(#(in, Basic(Newline))) -> {
           do_tokenize(in, matcher, line + 1, tokenized)
         }
+
         Ok(#(in, token)) -> {
           do_tokenize(in, matcher, line, [Token(token), ..tokenized])
         }
-        Error(_) -> {
+
+        Error(UntilError(_)) | Error(Labelled(UntilError(_), _)) -> {
+          let in =
+            in
+            |> string.split_once("\n")
+            |> result.map(pair.second)
+            |> result.unwrap("")
+          do_tokenize(in, matcher, line, [
+            TokenizedError(line, Unterminated),
+            ..tokenized
+          ])
+        }
+
+        Error(AnyError) | Error(Labelled(..)) -> {
           let assert Ok(first) = string.first(in)
           let in = string.drop_left(in, 1)
-          do_tokenize(in, matcher, line, [Unexpected(line, first), ..tokenized])
+          do_tokenize(in, matcher, line, [
+            TokenizedError(line, UnexpectedChar(first)),
+            ..tokenized
+          ])
         }
+
+        Error(error) ->
+          panic as { "unexpected error: " <> lex_error_to_string(error) }
       }
     }
   }
@@ -279,9 +320,12 @@ fn any(lexers: List(Lexer(a))) -> Lexer(a) {
 fn any_inner(in: String, lexers: List(Lexer(a))) -> LexResult(a) {
   case lexers {
     [] -> Error(AnyError)
-    [first, ..rest] -> {
-      use _ <- result.try_recover(first(in))
-      any_inner(in, rest)
+    [lexer, ..lexers] -> {
+      use error <- result.try_recover(lexer(in))
+      case error {
+        ShortCircuitAny(error) -> Error(error)
+        _ -> any_inner(in, lexers)
+      }
     }
   }
 }
