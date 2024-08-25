@@ -41,6 +41,8 @@ fn dir_to_string(dir: Dir) -> String {
 type Token {
   Paren(Dir)
   Brace(Dir)
+  EqualEqual
+  Equal
   Star
   Dot
   Comma
@@ -50,8 +52,8 @@ type Token {
 }
 
 const all_tokens = [
-  Paren(Left), Paren(Right), Brace(Left), Brace(Right), Star, Dot, Comma, Plus,
-  Minus, Semicolon,
+  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, Equal, Star,
+  Dot, Comma, Plus, Minus, Semicolon,
 ]
 
 fn token_to_pattern(token: Token) -> String {
@@ -60,6 +62,8 @@ fn token_to_pattern(token: Token) -> String {
     Paren(Right) -> ")"
     Brace(Left) -> "{"
     Brace(Right) -> "}"
+    EqualEqual -> "=="
+    Equal -> "="
     Star -> "*"
     Dot -> "."
     Comma -> ","
@@ -73,6 +77,7 @@ fn token_to_string(token: Token) -> String {
   case token {
     Paren(dir) -> dir_to_string(dir) <> "_PAREN"
     Brace(dir) -> dir_to_string(dir) <> "_BRACE"
+    EqualEqual -> "EQUAL_EQUAL"
     _ -> token |> string.inspect |> string.uppercase
   }
   <> " "
@@ -136,7 +141,7 @@ fn tokenized_to_return(tokenized: List(Tokenized)) -> Return {
 
 fn do_tokenized_to_return(tokenized: List(Tokenized), return: Return) -> Return {
   case tokenized {
-    [] -> Return(out: string.trim(return.out), error: string.trim(return.error))
+    [] -> return
     [first, ..rest] -> {
       let stringified = tokenized_to_string(first)
       let return = case tokenized_is_error(first) {

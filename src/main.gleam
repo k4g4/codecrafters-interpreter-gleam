@@ -32,8 +32,8 @@ pub fn main() {
 
 fn run(in: String) -> Nil {
   let Return(out, error) = lexer.scan(in)
-  io.println_error(error)
-  io.println(out)
+  io.print_error(error)
+  io.print(out)
   exit(case error {
     "" -> 0
     _ -> 65

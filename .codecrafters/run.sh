@@ -7,7 +7,6 @@
 # Learn more: https://codecrafters.io/program-interface
 
 set -e # Exit on failure
-set -o pipefail # Correct return code returned
 
 # TODO: Use --no-print-progress once https://github.com/gleam-lang/gleam/issues/2299 is implemented
 rm out 2>/dev/null || true
