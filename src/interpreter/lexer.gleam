@@ -188,7 +188,7 @@ fn do_tokenized_to_return(tokenized: List(Tokenized), return: Return) -> Return 
 }
 
 fn tokenize(in: String, matcher: Lexer(Token)) -> List(Tokenized) {
-  do_tokenize(in, matcher, 0, [])
+  do_tokenize(in, matcher, 1, [])
 }
 
 fn do_tokenize(
