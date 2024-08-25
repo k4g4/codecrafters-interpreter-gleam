@@ -46,6 +46,9 @@ type Token {
   LessEqual
   GreaterEqual
   Comment
+  Space
+  Tab
+  Newline
   Equal
   Bang
   Less
@@ -61,8 +64,8 @@ type Token {
 
 const all_tokens = [
   Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual,
-  LessEqual, GreaterEqual, Comment, Equal, Bang, Less, Greater, Star, Dot, Comma,
-  Plus, Minus, Slash, Semicolon,
+  LessEqual, GreaterEqual, Comment, Space, Tab, Newline, Equal, Bang, Less,
+  Greater, Star, Dot, Comma, Plus, Minus, Slash, Semicolon,
 ]
 
 fn token_to_pattern(token: Token) -> String {
@@ -76,6 +79,9 @@ fn token_to_pattern(token: Token) -> String {
     LessEqual -> "<="
     GreaterEqual -> ">="
     Comment -> "//"
+    Space -> " "
+    Tab -> "\t"
+    Newline -> "\n"
     Equal -> "="
     Bang -> "!"
     Less -> "<"
@@ -129,7 +135,7 @@ fn match_token(token: Token) -> Lexer(Token) {
     case token {
       Comment -> {
         case string.split_once(in, "\n") {
-          Ok(#(_, in)) -> #(in, token)
+          Ok(#(_, in)) -> #("\n" <> in, token)
           _ -> #("", token)
         }
       }
@@ -182,28 +188,32 @@ fn do_tokenized_to_return(tokenized: List(Tokenized), return: Return) -> Return 
 }
 
 fn tokenize(in: String, matcher: Lexer(Token)) -> List(Tokenized) {
-  do_tokenize(in, matcher, [])
+  do_tokenize(in, matcher, 0, [])
 }
 
 fn do_tokenize(
   in: String,
   matcher: Lexer(Token),
+  line: Int,
   tokenized: List(Tokenized),
 ) -> List(Tokenized) {
   case in {
     "" -> [Eof, ..tokenized]
     _ -> {
       case matcher(in) {
-        Ok(#(in, Comment)) -> {
-          do_tokenize(in, matcher, tokenized)
+        Ok(#(in, Comment)) | Ok(#(in, Space)) | Ok(#(in, Tab)) -> {
+          do_tokenize(in, matcher, line, tokenized)
+        }
+        Ok(#(in, Newline)) -> {
+          do_tokenize(in, matcher, line + 1, tokenized)
         }
         Ok(#(in, token)) -> {
-          do_tokenize(in, matcher, [Token(token), ..tokenized])
+          do_tokenize(in, matcher, line, [Token(token), ..tokenized])
         }
         Error(_) -> {
           let assert Ok(first) = string.first(in)
           let in = string.drop_left(in, 1)
-          do_tokenize(in, matcher, [Unexpected(1, first), ..tokenized])
+          do_tokenize(in, matcher, line, [Unexpected(line, first), ..tokenized])
         }
       }
     }
