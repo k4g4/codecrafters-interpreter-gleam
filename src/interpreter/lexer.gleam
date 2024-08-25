@@ -75,7 +75,7 @@ fn token_to_string(token: Token) -> String {
   }
   <> " "
   <> token_to_pattern(token)
-  <> " null \n"
+  <> " null\n"
 }
 
 fn tokens_to_string(tokens: List(Token), acc: String) -> String {
