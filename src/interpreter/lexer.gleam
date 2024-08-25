@@ -43,8 +43,12 @@ type Token {
   Brace(Dir)
   EqualEqual
   BangEqual
+  LessEqual
+  GreaterEqual
   Equal
   Bang
+  Less
+  Greater
   Star
   Dot
   Comma
@@ -54,8 +58,8 @@ type Token {
 }
 
 const all_tokens = [
-  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual, Equal, Bang, Star,
-  Dot, Comma, Plus, Minus, Semicolon,
+  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual, LessEqual, GreaterEqual,
+  Equal, Bang, Less, Greater, Star, Dot, Comma, Plus, Minus, Semicolon,
 ]
 
 fn token_to_pattern(token: Token) -> String {
@@ -66,8 +70,12 @@ fn token_to_pattern(token: Token) -> String {
     Brace(Right) -> "}"
     EqualEqual -> "=="
     BangEqual -> "!="
+    LessEqual -> "<="
+    GreaterEqual -> ">="
     Equal -> "="
     Bang -> "!"
+    Less -> "<"
+    Greater -> ">"
     Star -> "*"
     Dot -> "."
     Comma -> ","
@@ -83,6 +91,8 @@ fn token_to_string(token: Token) -> String {
     Brace(dir) -> dir_to_string(dir) <> "_BRACE"
     EqualEqual -> "EQUAL_EQUAL"
     BangEqual -> "BANG_EQUAL"
+    LessEqual -> "LESS_EQUAL"
+    GreaterEqual -> "GREATER_EQUAL"
     _ -> token |> string.inspect |> string.uppercase
   }
   <> " "
@@ -193,13 +203,13 @@ fn tag(tag: String) -> Lexer(Nil) {
   }
 }
 
-fn or(first: Lexer(a), second: Lexer(a)) -> Lexer(a) {
-  fn(in) {
-    use first_error <- result.try_recover(first(in))
-    use second_error <- result.try_recover(second(in))
-    Error(OrError(first_error, second_error))
-  }
-}
+// fn or(first: Lexer(a), second: Lexer(a)) -> Lexer(a) {
+//   fn(in) {
+//     use first_error <- result.try_recover(first(in))
+//     use second_error <- result.try_recover(second(in))
+//     Error(OrError(first_error, second_error))
+//   }
+// }
 
 fn any(lexers: List(Lexer(a))) -> Lexer(a) {
   any_inner(_, lexers)
