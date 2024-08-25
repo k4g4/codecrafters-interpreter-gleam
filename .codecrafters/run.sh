@@ -9,4 +9,5 @@
 set -e # Exit on failure
 
 # TODO: Use --no-print-progress once https://github.com/gleam-lang/gleam/issues/2299 is implemented
-exec gleam run --module main -- "$@" | grep -v "Compiled in" | grep -v "Running main.main"
+gleam run --module main -- "$@" | grep -v Compiled | grep -v Running
+exit $PIPESTATUS
