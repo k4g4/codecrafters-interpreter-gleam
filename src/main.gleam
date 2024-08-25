@@ -5,9 +5,6 @@ import argv
 import simplifile
 
 pub fn main() {
-  // You can use print statements as follows for debugging, they'll be visible when running tests.
-  io.println_error("Logs from your program will appear here!")
-
   let args = argv.load().arguments
 
   case args {
@@ -15,8 +12,7 @@ pub fn main() {
       case simplifile.read(filename) {
         Ok(contents) -> {
           case string.length(contents) {
-            // Uncomment this line to pass the first stage
-            // 0 -> io.println("EOF  null")
+            0 -> io.println("EOF  null")
             _ -> io.println_error("TODO: Implement scanner!")
           }
         }
