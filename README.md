@@ -1,3 +1,8 @@
+# NOTE
+This is a codecrafters.io challenge project.
+
+# CodeCrafters Readme
+
 [![progress-banner](https://backend.codecrafters.io/progress/interpreter/8726be8a-bc61-401c-9b05-4d036fc90301)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
 
 This is a starting point for Gleam solutions to the
