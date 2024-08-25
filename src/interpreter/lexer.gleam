@@ -42,7 +42,9 @@ type Token {
   Paren(Dir)
   Brace(Dir)
   EqualEqual
+  BangEqual
   Equal
+  Bang
   Star
   Dot
   Comma
@@ -52,7 +54,7 @@ type Token {
 }
 
 const all_tokens = [
-  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, Equal, Star,
+  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual, Equal, Bang, Star,
   Dot, Comma, Plus, Minus, Semicolon,
 ]
 
@@ -63,7 +65,9 @@ fn token_to_pattern(token: Token) -> String {
     Brace(Left) -> "{"
     Brace(Right) -> "}"
     EqualEqual -> "=="
+    BangEqual -> "!="
     Equal -> "="
+    Bang -> "!"
     Star -> "*"
     Dot -> "."
     Comma -> ","
@@ -78,6 +82,7 @@ fn token_to_string(token: Token) -> String {
     Paren(dir) -> dir_to_string(dir) <> "_PAREN"
     Brace(dir) -> dir_to_string(dir) <> "_BRACE"
     EqualEqual -> "EQUAL_EQUAL"
+    BangEqual -> "BANG_EQUAL"
     _ -> token |> string.inspect |> string.uppercase
   }
   <> " "
