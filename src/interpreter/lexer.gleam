@@ -24,32 +24,56 @@ type LexResult(a) =
 type Lexer(a) =
   fn(String) -> LexResult(a)
 
+type Dir {
+  Left
+  Right
+}
+
+fn dir_to_string(dir: Dir) -> String {
+  case dir {
+    Left -> "LEFT"
+    Right -> "RIGHT"
+  }
+}
+
 type Token {
-  LeftParen
-  RightParen
-  LeftBrace
-  RightBrace
+  Paren(Dir)
+  Brace(Dir)
+  Star
+  Dot
+  Comma
+  Plus
 }
 
 fn token_to_pattern(token: Token) -> String {
   case token {
-    LeftParen -> "("
-    RightParen -> ")"
-    LeftBrace -> "{"
-    RightBrace -> "}"
+    Paren(Left) -> "("
+    Paren(Right) -> ")"
+    Brace(Left) -> "{"
+    Brace(Right) -> "}"
+    Star -> "*"
+    Dot -> "."
+    Comma -> ","
+    Plus -> "+"
   }
 }
 
-const all_tokens = [LeftParen, RightParen, LeftBrace, RightBrace]
+const all_tokens = [
+  Paren(Left), Paren(Right), Brace(Left), Brace(Right), Star, Dot, Comma, Plus,
+]
 
 fn token_to_string(token: Token) -> String {
   case token {
-    LeftParen -> "LEFT_PAREN ( null"
-    RightParen -> "RIGHT_PAREN ) null"
-    LeftBrace -> "LEFT_BRACE { null"
-    RightBrace -> "RIGHT_BRACE } null"
+    Paren(dir) -> dir_to_string(dir) <> "_PAREN"
+    Brace(dir) -> dir_to_string(dir) <> "_BRACE"
+    Star -> "STAR"
+    Dot -> "DOT"
+    Comma -> "COMMA"
+    Plus -> "PLUS"
   }
-  <> "\n"
+  <> " "
+  <> token_to_pattern(token)
+  <> " null \n"
 }
 
 fn tokens_to_string(tokens: List(Token), acc: String) -> String {
