@@ -43,6 +43,8 @@ type Token {
   Dot
   Comma
   Plus
+  Minus
+  Semicolon
 }
 
 fn token_to_pattern(token: Token) -> String {
@@ -55,6 +57,8 @@ fn token_to_pattern(token: Token) -> String {
     Dot -> "."
     Comma -> ","
     Plus -> "+"
+    Minus -> "-"
+    Semicolon -> ";"
   }
 }
 
@@ -66,10 +70,7 @@ fn token_to_string(token: Token) -> String {
   case token {
     Paren(dir) -> dir_to_string(dir) <> "_PAREN"
     Brace(dir) -> dir_to_string(dir) <> "_BRACE"
-    Star -> "STAR"
-    Dot -> "DOT"
-    Comma -> "COMMA"
-    Plus -> "PLUS"
+    _ -> token |> string.inspect |> string.uppercase
   }
   <> " "
   <> token_to_pattern(token)
