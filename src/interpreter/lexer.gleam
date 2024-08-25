@@ -1,10 +1,12 @@
 import gleam/int
 import gleam/list
+import gleam/pair
 import gleam/result
 import gleam/string
 
 type LexError {
   TagError(String)
+  UntilError(String)
   OrError(LexError, LexError)
   AnyError
   Labelled(LexError, String)
@@ -13,6 +15,7 @@ type LexError {
 fn error_to_string(error: LexError) -> String {
   case error {
     TagError(tag) -> "tag(" <> tag <> ")"
+    UntilError(until) -> "until(" <> until <> ")"
     OrError(first, second) ->
       "(" <> error_to_string(first) <> ", " <> error_to_string(second) <> ")"
     AnyError -> "any"
@@ -38,14 +41,17 @@ fn dir_to_string(dir: Dir) -> String {
   }
 }
 
-type Token {
+type Literal {
+  LiteralString(String)
+}
+
+type BasicToken {
   Paren(Dir)
   Brace(Dir)
   EqualEqual
   BangEqual
   LessEqual
   GreaterEqual
-  Comment
   Space
   Tab
   Newline
@@ -62,14 +68,20 @@ type Token {
   Semicolon
 }
 
-const all_tokens = [
+const basic_tokens = [
   Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual,
-  LessEqual, GreaterEqual, Comment, Space, Tab, Newline, Equal, Bang, Less,
-  Greater, Star, Dot, Comma, Plus, Minus, Slash, Semicolon,
+  LessEqual, GreaterEqual, Space, Tab, Newline, Equal, Bang, Less, Greater, Star,
+  Dot, Comma, Plus, Minus, Slash, Semicolon,
 ]
 
-fn token_to_pattern(token: Token) -> String {
-  case token {
+type Token {
+  Literal(Literal)
+  Comment
+  Basic(BasicToken)
+}
+
+fn basic_token_to_pattern(basic_token: BasicToken) -> String {
+  case basic_token {
     Paren(Left) -> "("
     Paren(Right) -> ")"
     Brace(Left) -> "{"
@@ -78,7 +90,6 @@ fn token_to_pattern(token: Token) -> String {
     BangEqual -> "!="
     LessEqual -> "<="
     GreaterEqual -> ">="
-    Comment -> "//"
     Space -> " "
     Tab -> "\t"
     Newline -> "\n"
@@ -98,17 +109,46 @@ fn token_to_pattern(token: Token) -> String {
 
 fn token_to_string(token: Token) -> String {
   case token {
-    Paren(dir) -> dir_to_string(dir) <> "_PAREN"
-    Brace(dir) -> dir_to_string(dir) <> "_BRACE"
-    EqualEqual -> "EQUAL_EQUAL"
-    BangEqual -> "BANG_EQUAL"
-    LessEqual -> "LESS_EQUAL"
-    GreaterEqual -> "GREATER_EQUAL"
-    _ -> token |> string.inspect |> string.uppercase
+    Literal(LiteralString(contents)) ->
+      "STRING \"" <> contents <> "\" " <> contents
+
+    Comment -> ""
+
+    Basic(basic_token) -> {
+      let name = case basic_token {
+        Paren(dir) -> dir_to_string(dir) <> "_PAREN"
+        Brace(dir) -> dir_to_string(dir) <> "_BRACE"
+        EqualEqual -> "EQUAL_EQUAL"
+        BangEqual -> "BANG_EQUAL"
+        LessEqual -> "LESS_EQUAL"
+        GreaterEqual -> "GREATER_EQUAL"
+        basic_token -> basic_token |> string.inspect |> string.uppercase
+      }
+      name <> " " <> basic_token_to_pattern(basic_token) <> " null"
+    }
   }
-  <> " "
-  <> token_to_pattern(token)
-  <> " null"
+}
+
+fn match_basic_token(basic_token: BasicToken) -> Lexer(Token) {
+  fn(in) {
+    let pattern = basic_token_to_pattern(basic_token)
+    use #(in, _) <- result.map(tag(pattern)(in))
+    #(in, Basic(basic_token))
+  }
+}
+
+fn comment(in: String) -> LexResult(Token) {
+  use #(in, _) <- result.map(tag("//")(in))
+  case string.split_once(in, "\n") {
+    Ok(#(_, in)) -> #("\n" <> in, Comment)
+    _ -> #("", Comment)
+  }
+}
+
+fn string_literal(in: String) -> LexResult(Token) {
+  use #(in, _) <- result.try(tag("\"")(in))
+  use #(in, contents) <- result.map(until("\"")(in))
+  #(in, Literal(LiteralString(contents)))
 }
 
 pub type Return {
@@ -117,8 +157,10 @@ pub type Return {
 
 pub fn scan(in: String) -> Return {
   let matcher =
-    all_tokens
-    |> list.map(match_token)
+    basic_tokens
+    |> list.map(match_basic_token)
+    |> list.prepend(comment)
+    |> list.prepend(string_literal)
     |> any
     |> label_error(fn(in) {
       let unexpected = in |> string.first |> result.unwrap("")
@@ -126,22 +168,6 @@ pub fn scan(in: String) -> Return {
     })
 
   tokenized_to_return(tokenize(in, matcher))
-}
-
-fn match_token(token: Token) -> Lexer(Token) {
-  fn(in) {
-    let pattern = token_to_pattern(token)
-    use #(in, _) <- result.map(tag(pattern)(in))
-    case token {
-      Comment -> {
-        case string.split_once(in, "\n") {
-          Ok(#(_, in)) -> #("\n" <> in, token)
-          _ -> #("", token)
-        }
-      }
-      _ -> #(in, token)
-    }
-  }
 }
 
 type Tokenized {
@@ -201,10 +227,10 @@ fn do_tokenize(
     "" -> [Eof, ..tokenized]
     _ -> {
       case matcher(in) {
-        Ok(#(in, Comment)) | Ok(#(in, Space)) | Ok(#(in, Tab)) -> {
+        Ok(#(in, Comment)) | Ok(#(in, Basic(Space))) | Ok(#(in, Basic(Tab))) -> {
           do_tokenize(in, matcher, line, tokenized)
         }
-        Ok(#(in, Newline)) -> {
+        Ok(#(in, Basic(Newline))) -> {
           do_tokenize(in, matcher, line + 1, tokenized)
         }
         Ok(#(in, token)) -> {
@@ -226,6 +252,15 @@ fn tag(tag: String) -> Lexer(Nil) {
       True -> Ok(#(string.drop_left(in, string.length(tag)), Nil))
       _ -> Error(TagError(tag))
     }
+  }
+}
+
+fn until(until: String) -> Lexer(String) {
+  fn(in) {
+    in
+    |> string.split_once(until)
+    |> result.map(pair.swap)
+    |> result.map_error(fn(_) { UntilError(until) })
   }
 }
 
