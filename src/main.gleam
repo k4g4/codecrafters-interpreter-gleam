@@ -1,5 +1,6 @@
 import gleam/io
 import gleam/string
+import interpreter/lexer
 
 import argv
 import simplifile
@@ -11,9 +12,13 @@ pub fn main() {
     ["tokenize", filename] -> {
       case simplifile.read(filename) {
         Ok(contents) -> {
-          case string.length(contents) {
-            0 -> io.println("EOF  null")
-            _ -> io.println_error("TODO: Implement scanner!")
+          case string.is_empty(contents) {
+            True -> io.println("EOF  null")
+            _ ->
+              case lexer.scan(contents) {
+                Ok(out) -> io.println(out)
+                Error(out) -> io.println_error(out)
+              }
           }
         }
         Error(error) -> {
