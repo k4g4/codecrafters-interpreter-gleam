@@ -1,10 +1,14 @@
+import gleam/bool
+import gleam/float
 import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
 
 type LexError {
+  InvalidNumberError
   TagError(String)
   UntilError(String)
   OrError(LexError, LexError)
@@ -15,6 +19,7 @@ type LexError {
 
 fn lex_error_to_string(error: LexError) -> String {
   case error {
+    InvalidNumberError -> "invalid number"
     TagError(tag) -> "tag(" <> tag <> ")"
     UntilError(until) -> "until(" <> until <> ")"
     OrError(first, second) ->
@@ -48,7 +53,8 @@ fn dir_to_string(dir: Dir) -> String {
 }
 
 type Literal {
-  LiteralString(String)
+  LiteralString
+  LiteralNumber(Float)
 }
 
 type BasicToken {
@@ -81,7 +87,7 @@ const basic_tokens = [
 ]
 
 type Token {
-  Literal(Literal)
+  Literal(literal: Literal, lexeme: String)
   Comment
   Basic(BasicToken)
 }
@@ -115,8 +121,10 @@ fn basic_token_to_pattern(basic_token: BasicToken) -> String {
 
 fn token_to_string(token: Token) -> String {
   case token {
-    Literal(LiteralString(contents)) ->
-      "STRING \"" <> contents <> "\" " <> contents
+    Literal(LiteralString, lexeme) -> "STRING \"" <> lexeme <> "\" " <> lexeme
+
+    Literal(LiteralNumber(number), lexeme) ->
+      "NUMBER " <> lexeme <> " " <> float.to_string(number)
 
     Comment -> ""
 
@@ -155,7 +163,27 @@ fn string_literal(in: String) -> LexResult(Token) {
   use #(in, _) <- result.try(tag("\"")(in))
   let until_result = in |> until("\"") |> result.map_error(ShortCircuitAny)
   use #(in, contents) <- result.map(until_result)
-  #(in, Literal(LiteralString(contents)))
+  #(in, Literal(LiteralString, contents))
+}
+
+fn number_literal(in: String) -> LexResult(Token) {
+  let is_digit = fn(c) { result.is_ok(int.parse(c)) }
+  let assert Ok(#(in, digits)) = while(is_digit)(in)
+  use <- bool.guard(digits == "", Error(InvalidNumberError))
+  let assert Ok(#(in, maybe_decimal)) = maybe(tag("."))(in)
+  case maybe_decimal {
+    Some(_) -> {
+      let assert Ok(#(in, decimal_digits)) = while(is_digit)(in)
+      use <- bool.guard(decimal_digits == "", Error(InvalidNumberError))
+      let all_digits = digits <> "." <> decimal_digits
+      let assert Ok(number) = float.parse(all_digits)
+      Ok(#(in, Literal(LiteralNumber(number), all_digits)))
+    }
+    None -> {
+      let assert Ok(number) = digits |> int.parse |> result.map(int.to_float)
+      Ok(#(in, Literal(LiteralNumber(number), digits)))
+    }
+  }
 }
 
 pub type Return {
@@ -168,6 +196,7 @@ pub fn scan(in: String) -> Return {
     |> list.map(match_basic_token)
     |> list.prepend(comment)
     |> list.prepend(string_literal)
+    |> list.prepend(number_literal)
     |> any
     |> label_error(fn(in) {
       let unexpected = in |> string.first |> result.unwrap("")
@@ -302,6 +331,34 @@ fn until(until: String) -> Lexer(String) {
     |> string.split_once(until)
     |> result.map(pair.swap)
     |> result.map_error(fn(_) { UntilError(until) })
+  }
+}
+
+fn while(f: fn(String) -> Bool) -> Lexer(String) {
+  fn(in) { Ok(while_inner(in, "", f)) }
+}
+
+fn while_inner(
+  in: String,
+  acc: String,
+  f: fn(String) -> Bool,
+) -> #(String, String) {
+  case string.pop_grapheme(in) {
+    Ok(#(first, in)) ->
+      case f(first) {
+        True -> while_inner(in, acc <> first, f)
+        _ -> #(first <> in, acc)
+      }
+    _ -> #(in, acc)
+  }
+}
+
+fn maybe(lexer: Lexer(a)) -> Lexer(Option(a)) {
+  fn(in) {
+    in
+    |> lexer
+    |> result.map(pair.map_second(_, Some))
+    |> result.try_recover(fn(_) { Ok(#(in, None)) })
   }
 }
 
