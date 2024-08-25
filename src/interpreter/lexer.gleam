@@ -1,4 +1,4 @@
-import gleam/io
+import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
@@ -7,6 +7,7 @@ type LexError {
   TagError(String)
   OrError(LexError, LexError)
   AnyError
+  Labelled(LexError, String)
 }
 
 fn error_to_string(error: LexError) -> String {
@@ -15,6 +16,7 @@ fn error_to_string(error: LexError) -> String {
     OrError(first, second) ->
       "(" <> error_to_string(first) <> ", " <> error_to_string(second) <> ")"
     AnyError -> "any"
+    Labelled(error, label) -> error_to_string(error) <> " (" <> label <> ")"
   }
 }
 
@@ -75,24 +77,24 @@ fn token_to_string(token: Token) -> String {
   }
   <> " "
   <> token_to_pattern(token)
-  <> " null\n"
+  <> " null"
 }
 
-fn tokens_to_string(tokens: List(Token), acc: String) -> String {
-  case tokens {
-    [] -> acc
-    [first, ..rest] -> {
-      tokens_to_string(rest, token_to_string(first) <> acc)
-    }
-  }
+pub type Return {
+  Return(out: String, error: String)
 }
 
-pub fn scan(in: String) -> Result(String, String) {
-  let matcher = all_tokens |> list.map(match_token) |> any
-  tokenize(in, matcher, [])
-  |> result.map_error(error_to_string)
-  |> result.map(tokens_to_string(_, ""))
-  |> result.map(string.append(_, "EOF  null"))
+pub fn scan(in: String) -> Return {
+  let matcher =
+    all_tokens
+    |> list.map(match_token)
+    |> any
+    |> label_error(fn(in) {
+      let unexpected = in |> string.first |> result.unwrap("")
+      "[line 1] Error: Unexpected character: " <> unexpected
+    })
+
+  tokenized_to_return(tokenize(in, matcher))
 }
 
 fn match_token(token: Token) -> Lexer(Token) {
@@ -103,16 +105,71 @@ fn match_token(token: Token) -> Lexer(Token) {
   }
 }
 
-fn tokenize(
+type Tokenized {
+  Token(Token)
+  Unexpected(line: Int, char: String)
+  Eof
+}
+
+fn tokenized_is_error(tokenized) -> Bool {
+  case tokenized {
+    Unexpected(..) -> True
+    _ -> False
+  }
+}
+
+fn tokenized_to_string(tokenized: Tokenized) -> String {
+  case tokenized {
+    Token(token) -> token_to_string(token)
+    Unexpected(line, char) ->
+      "[line "
+      <> int.to_string(line)
+      <> "] Error: Unexpected character: "
+      <> char
+    Eof -> "EOF  null"
+  }
+}
+
+fn tokenized_to_return(tokenized: List(Tokenized)) -> Return {
+  do_tokenized_to_return(tokenized, Return("", ""))
+}
+
+fn do_tokenized_to_return(tokenized: List(Tokenized), return: Return) -> Return {
+  case tokenized {
+    [] -> Return(out: string.trim(return.out), error: string.trim(return.error))
+    [first, ..rest] -> {
+      let stringified = tokenized_to_string(first)
+      let return = case tokenized_is_error(first) {
+        True -> Return(..return, error: stringified <> "\n" <> return.error)
+        _ -> Return(..return, out: stringified <> "\n" <> return.out)
+      }
+      do_tokenized_to_return(rest, return)
+    }
+  }
+}
+
+fn tokenize(in: String, matcher: Lexer(Token)) -> List(Tokenized) {
+  do_tokenize(in, matcher, [])
+}
+
+fn do_tokenize(
   in: String,
   matcher: Lexer(Token),
-  tokens: List(Token),
-) -> Result(List(Token), LexError) {
+  tokenized: List(Tokenized),
+) -> List(Tokenized) {
   case in {
-    "" -> Ok(tokens)
+    "" -> [Eof, ..tokenized]
     _ -> {
-      use #(in, token) <- result.try(matcher(in))
-      tokenize(in, matcher, [token, ..tokens])
+      case matcher(in) {
+        Ok(#(in, token)) -> {
+          do_tokenize(in, matcher, [Token(token), ..tokenized])
+        }
+        Error(_) -> {
+          let assert Ok(first) = string.first(in)
+          let in = string.drop_left(in, 1)
+          do_tokenize(in, matcher, [Unexpected(1, first), ..tokenized])
+        }
+      }
     }
   }
 }
@@ -146,4 +203,8 @@ fn any_inner(in: String, lexers: List(Lexer(a))) -> LexResult(a) {
       any_inner(in, rest)
     }
   }
+}
+
+fn label_error(lexer: Lexer(a), to_label: fn(String) -> String) -> Lexer(a) {
+  fn(in) { lexer(in) |> result.map_error(Labelled(_, to_label(in))) }
 }

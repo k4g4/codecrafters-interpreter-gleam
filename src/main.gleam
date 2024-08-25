@@ -1,4 +1,4 @@
-import interpreter/lexer
+import interpreter/lexer.{Return}
 
 import gleam/io
 import gleam/result
@@ -31,16 +31,13 @@ pub fn main() {
 }
 
 fn run(in: String) -> Nil {
-  case lexer.scan(in) {
-    Ok(out) -> {
-      io.println(out)
-      exit(0)
-    }
-    Error(error) -> {
-      io.println_error("Error: " <> error)
-      exit(1)
-    }
-  }
+  let Return(out, error) = lexer.scan(in)
+  io.println_error(error)
+  io.println(out)
+  exit(case error {
+    "" -> 0
+    _ -> 65
+  })
 }
 
 @external(erlang, "erlang", "halt")
