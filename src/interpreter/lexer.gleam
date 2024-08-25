@@ -45,6 +45,7 @@ type Token {
   BangEqual
   LessEqual
   GreaterEqual
+  Comment
   Equal
   Bang
   Less
@@ -54,12 +55,14 @@ type Token {
   Comma
   Plus
   Minus
+  Slash
   Semicolon
 }
 
 const all_tokens = [
-  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual, LessEqual, GreaterEqual,
-  Equal, Bang, Less, Greater, Star, Dot, Comma, Plus, Minus, Semicolon,
+  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual,
+  LessEqual, GreaterEqual, Equal, Bang, Less, Greater, Star, Dot, Comma, Plus,
+  Minus, Semicolon,
 ]
 
 fn token_to_pattern(token: Token) -> String {
@@ -72,6 +75,7 @@ fn token_to_pattern(token: Token) -> String {
     BangEqual -> "!="
     LessEqual -> "<="
     GreaterEqual -> ">="
+    Comment -> "//"
     Equal -> "="
     Bang -> "!"
     Less -> "<"
@@ -81,6 +85,7 @@ fn token_to_pattern(token: Token) -> String {
     Comma -> ","
     Plus -> "+"
     Minus -> "-"
+    Slash -> "/"
     Semicolon -> ";"
   }
 }
@@ -121,7 +126,15 @@ fn match_token(token: Token) -> Lexer(Token) {
   fn(in) {
     let pattern = token_to_pattern(token)
     use #(in, _) <- result.map(tag(pattern)(in))
-    #(in, token)
+    case token {
+      Comment -> {
+        case string.split_once(in, "\n") {
+          Ok(#(_, in)) -> #(in, token)
+          _ -> #("", token)
+        }
+      }
+      _ -> #(in, token)
+    }
   }
 }
 
@@ -181,6 +194,9 @@ fn do_tokenize(
     "" -> [Eof, ..tokenized]
     _ -> {
       case matcher(in) {
+        Ok(#(in, Comment)) -> {
+          do_tokenize(in, matcher, tokenized)
+        }
         Ok(#(in, token)) -> {
           do_tokenize(in, matcher, [Token(token), ..tokenized])
         }
