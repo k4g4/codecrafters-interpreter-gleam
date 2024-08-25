@@ -1,4 +1,4 @@
-import gleam/bool
+import gleam/io
 import gleam/list
 import gleam/result
 import gleam/string
@@ -47,6 +47,11 @@ type Token {
   Semicolon
 }
 
+const all_tokens = [
+  Paren(Left), Paren(Right), Brace(Left), Brace(Right), Star, Dot, Comma, Plus,
+  Minus, Semicolon,
+]
+
 fn token_to_pattern(token: Token) -> String {
   case token {
     Paren(Left) -> "("
@@ -61,10 +66,6 @@ fn token_to_pattern(token: Token) -> String {
     Semicolon -> ";"
   }
 }
-
-const all_tokens = [
-  Paren(Left), Paren(Right), Brace(Left), Brace(Right), Star, Dot, Comma, Plus,
-]
 
 fn token_to_string(token: Token) -> String {
   case token {
@@ -107,9 +108,13 @@ fn tokenize(
   matcher: Lexer(Token),
   tokens: List(Token),
 ) -> Result(List(Token), LexError) {
-  use <- bool.guard(string.is_empty(in), Ok(tokens))
-  use #(in, token) <- result.try(matcher(in))
-  tokenize(in, matcher, [token, ..tokens])
+  case in {
+    "" -> Ok(tokens)
+    _ -> {
+      use #(in, token) <- result.try(matcher(in))
+      tokenize(in, matcher, [token, ..tokens])
+    }
+  }
 }
 
 fn tag(tag: String) -> Lexer(Nil) {
