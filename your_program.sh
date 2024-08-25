@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Use this script to run your program LOCALLY.
 #
@@ -21,5 +21,6 @@ set -e # Exit early if any commands fail
 #
 # - Edit this to change how your program runs locally
 # - Edit .codecrafters/run.sh to change how your program runs remotely
-gleam run --module main -- "$@" | grep -v Compiled | grep -v Running
-exit $PIPESTATUS
+mkfifo out
+cat out | grep -v Compiled | grep -v Running &
+exec gleam run --module main -- "$@" >out
