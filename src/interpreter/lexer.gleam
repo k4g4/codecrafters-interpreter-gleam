@@ -3,27 +3,6 @@ import gleam/list
 import gleam/result
 import gleam/string
 
-pub fn scan(in: String) -> Result(String, String) {
-  let pattern_to_token = [#("(", LeftParen), #(")", RightParen)]
-  let token_matchers = {
-    use #(pattern, token) <- list.map(pattern_to_token)
-    match_token(pattern, token)
-  }
-  let matcher = any(token_matchers)
-
-  tokenize(in, matcher, [])
-  |> result.map_error(error_to_string)
-  |> result.map(tokens_to_string(_, ""))
-  |> result.map(string.append(_, "EOF  null"))
-}
-
-fn match_token(pattern: String, token: Token) -> Lexer(Token) {
-  fn(in) {
-    use #(in, _) <- result.map(tag(pattern)(in))
-    #(in, token)
-  }
-}
-
 type LexError {
   TagError(String)
   OrError(LexError, LexError)
@@ -48,6 +27,29 @@ type Lexer(a) =
 type Token {
   LeftParen
   RightParen
+  LeftBrace
+  RightBrace
+}
+
+fn token_to_pattern(token: Token) -> String {
+  case token {
+    LeftParen -> "("
+    RightParen -> ")"
+    LeftBrace -> "{"
+    RightBrace -> "}"
+  }
+}
+
+const all_tokens = [LeftParen, RightParen, LeftBrace, RightBrace]
+
+fn token_to_string(token: Token) -> String {
+  case token {
+    LeftParen -> "LEFT_PAREN ( null"
+    RightParen -> "RIGHT_PAREN ) null"
+    LeftBrace -> "LEFT_BRACE { null"
+    RightBrace -> "RIGHT_BRACE } null"
+  }
+  <> "\n"
 }
 
 fn tokens_to_string(tokens: List(Token), acc: String) -> String {
@@ -59,12 +61,20 @@ fn tokens_to_string(tokens: List(Token), acc: String) -> String {
   }
 }
 
-fn token_to_string(token: Token) -> String {
-  case token {
-    LeftParen -> "LEFT_PAREN ( null"
-    RightParen -> "RIGHT_PAREN ) null"
+pub fn scan(in: String) -> Result(String, String) {
+  let matcher = all_tokens |> list.map(match_token) |> any
+  tokenize(in, matcher, [])
+  |> result.map_error(error_to_string)
+  |> result.map(tokens_to_string(_, ""))
+  |> result.map(string.append(_, "EOF  null"))
+}
+
+fn match_token(token: Token) -> Lexer(Token) {
+  fn(in) {
+    let pattern = token_to_pattern(token)
+    use #(in, _) <- result.map(tag(pattern)(in))
+    #(in, token)
   }
-  <> "\n"
 }
 
 fn tokenize(
