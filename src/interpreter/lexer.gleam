@@ -54,7 +54,7 @@ fn tokens_to_string(tokens: List(Token), acc: String) -> String {
   case tokens {
     [] -> acc
     [first, ..rest] -> {
-      tokens_to_string(rest, acc <> token_to_string(first))
+      tokens_to_string(rest, token_to_string(first) <> acc)
     }
   }
 }
