@@ -61,8 +61,8 @@ type Token {
 
 const all_tokens = [
   Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual,
-  LessEqual, GreaterEqual, Equal, Bang, Less, Greater, Star, Dot, Comma, Plus,
-  Minus, Semicolon,
+  LessEqual, GreaterEqual, Comment, Equal, Bang, Less, Greater, Star, Dot, Comma,
+  Plus, Minus, Slash, Semicolon,
 ]
 
 fn token_to_pattern(token: Token) -> String {
