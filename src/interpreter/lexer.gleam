@@ -89,13 +89,14 @@ fn keyword_to_pattern(keyword: KeywordToken) -> String {
   keyword
   |> string.inspect
   |> string.drop_left(string.length("Keyword"))
+  |> string.lowercase
 }
 
 fn match_keyword(keyword: KeywordToken) -> Lexer(Token) {
   fn(in) {
     let pattern = keyword_to_pattern(keyword)
-    use #(in, lexeme) <- result.map(tag_no_case(pattern)(in))
-    #(in, Keyword(keyword, lexeme))
+    use #(in, _) <- result.map(tag(pattern)(in))
+    #(in, Keyword(keyword, pattern))
   }
 }
 
@@ -405,15 +406,15 @@ fn tag(tag: String) -> Lexer(Nil) {
   }
 }
 
-fn tag_no_case(tag: String) -> Lexer(String) {
-  fn(in) {
-    let substr = string.slice(in, 0, string.length(tag))
-    case string.lowercase(substr) == string.lowercase(tag) {
-      True -> Ok(#(string.drop_left(in, string.length(tag)), substr))
-      _ -> Error(TagError(tag))
-    }
-  }
-}
+// fn tag_no_case(tag: String) -> Lexer(String) {
+//   fn(in) {
+//     let substr = string.slice(in, 0, string.length(tag))
+//     case string.lowercase(substr) == string.lowercase(tag) {
+//       True -> Ok(#(string.drop_left(in, string.length(tag)), substr))
+//       _ -> Error(TagError(tag))
+//     }
+//   }
+// }
 
 fn until(until: String) -> Lexer(String) {
   fn(in) {
