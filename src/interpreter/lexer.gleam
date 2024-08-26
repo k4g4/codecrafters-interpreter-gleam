@@ -1,3 +1,5 @@
+import interpreter/common.{type Return, Return}
+
 import gleam/bool
 import gleam/float
 import gleam/function
@@ -43,7 +45,7 @@ type LexResult(a) =
 type Lexer(a) =
   fn(String) -> LexResult(a)
 
-type Dir {
+pub type Dir {
   Left
   Right
 }
@@ -55,12 +57,12 @@ fn dir_to_string(dir: Dir) -> String {
   }
 }
 
-type Literal {
+pub type Literal {
   LiteralString
   LiteralNumber(Float)
 }
 
-type KeywordToken {
+pub type KeywordToken {
   KeywordAnd
   KeywordClass
   KeywordElse
@@ -100,7 +102,7 @@ fn match_keyword(keyword: KeywordToken) -> Lexer(Token) {
   }
 }
 
-type BasicToken {
+pub type BasicToken {
   Paren(Dir)
   Brace(Dir)
   EqualEqual
@@ -164,7 +166,7 @@ fn match_basic_token(basic_token: BasicToken) -> Lexer(Token) {
   }
 }
 
-type Token {
+pub type Token {
   Ident(String)
   Literal(literal: Literal, lexeme: String)
   Comment
@@ -265,26 +267,32 @@ fn ident(in: String) -> LexResult(Token) {
   }
 }
 
-pub type Return {
-  Return(out: String, error: String)
+fn matcher() -> Lexer(Token) {
+  basic_tokens
+  |> list.map(match_basic_token)
+  |> list.prepend(comment)
+  |> list.prepend(string_literal)
+  |> list.prepend(number_literal)
+  |> list.prepend(ident)
+  |> { function.flip(list.append) }(list.map(keywords, match_keyword))
+  |> any
 }
 
 pub fn scan(in: String) -> Return {
-  let matcher =
-    basic_tokens
-    |> list.map(match_basic_token)
-    |> list.prepend(comment)
-    |> list.prepend(string_literal)
-    |> list.prepend(number_literal)
-    |> list.prepend(ident)
-    |> { function.flip(list.append) }(list.map(keywords, match_keyword))
-    |> any
-    |> label_error(fn(in) {
-      let unexpected = in |> string.first |> result.unwrap("")
-      "[line 1] Error: Unexpected character: " <> unexpected
-    })
+  tokenized_to_return(tokenize(in, matcher()))
+}
 
-  tokenized_to_return(tokenize(in, matcher))
+pub fn lex(in: String) -> Result(List(Token), String) {
+  tokenize(in, matcher())
+  |> list.try_map(fn(tokenized) {
+    case tokenized {
+      Token(token) -> Ok(Ok(token))
+      TokenizedError(error: error, ..) ->
+        Error(tokenized_error_to_string(error))
+      Eof -> Ok(Error(Nil))
+    }
+  })
+  |> result.map(list.filter_map(_, function.identity))
 }
 
 type TokenizedError {
@@ -477,7 +485,6 @@ fn any_inner(in: String, lexers: List(Lexer(a))) -> LexResult(a) {
     }
   }
 }
-
-fn label_error(lexer: Lexer(a), to_label: fn(String) -> String) -> Lexer(a) {
-  fn(in) { lexer(in) |> result.map_error(Labelled(_, to_label(in))) }
-}
+// fn label_error(lexer: Lexer(a), to_label: fn(String) -> String) -> Lexer(a) {
+//   fn(in) { lexer(in) |> result.map_error(Labelled(_, to_label(in))) }
+// }
