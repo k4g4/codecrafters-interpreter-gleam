@@ -11,7 +11,6 @@ type LexError {
   InvalidNumberError
   IdentError
   TagError(String)
-  IsError
   UntilError(String)
   OrError(LexError, LexError)
   AnyError
@@ -24,7 +23,6 @@ fn lex_error_to_string(error: LexError) -> String {
     InvalidNumberError -> "invalidnumber"
     IdentError -> "ident"
     TagError(tag) -> "tag(" <> tag <> ")"
-    IsError -> "is"
     UntilError(until) -> "until(" <> until <> ")"
     OrError(first, second) ->
       "("
@@ -359,17 +357,6 @@ fn tag(tag: String) -> Lexer(Nil) {
     case string.starts_with(in, tag) {
       True -> Ok(#(string.drop_left(in, string.length(tag)), Nil))
       _ -> Error(TagError(tag))
-    }
-  }
-}
-
-fn is(f: fn(String) -> Bool) -> Lexer(String) {
-  fn(in) {
-    let first_result = in |> string.first |> result.map_error(fn(_) { IsError })
-    use first <- result.try(first_result)
-    case f(first) {
-      True -> Ok(#(string.drop_left(in, 1), first))
-      _ -> Error(IsError)
     }
   }
 }
