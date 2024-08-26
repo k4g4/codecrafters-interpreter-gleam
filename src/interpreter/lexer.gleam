@@ -1,5 +1,6 @@
 import gleam/bool
 import gleam/float
+import gleam/function
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -59,6 +60,45 @@ type Literal {
   LiteralNumber(Float)
 }
 
+type KeywordToken {
+  KeywordAnd
+  KeywordClass
+  KeywordElse
+  KeywordFalse
+  KeywordFor
+  KeywordFun
+  KeywordIf
+  KeywordNil
+  KeywordOr
+  KeywordPrint
+  KeywordReturn
+  KeywordSuper
+  KeywordThis
+  KeywordTrue
+  KeywordVar
+  KeywordWhile
+}
+
+const keywords = [
+  KeywordAnd, KeywordClass, KeywordElse, KeywordFalse, KeywordFor, KeywordFun,
+  KeywordIf, KeywordNil, KeywordOr, KeywordPrint, KeywordReturn, KeywordSuper,
+  KeywordThis, KeywordTrue, KeywordVar, KeywordWhile,
+]
+
+fn keyword_to_pattern(keyword: KeywordToken) -> String {
+  keyword
+  |> string.inspect
+  |> string.drop_left(string.length("Keyword"))
+}
+
+fn match_keyword(keyword: KeywordToken) -> Lexer(Token) {
+  fn(in) {
+    let pattern = keyword_to_pattern(keyword)
+    use #(in, lexeme) <- result.map(tag_no_case(pattern)(in))
+    #(in, Keyword(keyword, lexeme))
+  }
+}
+
 type BasicToken {
   Paren(Dir)
   Brace(Dir)
@@ -88,13 +128,6 @@ const basic_tokens = [
   Dot, Comma, Plus, Minus, Slash, Semicolon,
 ]
 
-type Token {
-  Ident(String)
-  Literal(literal: Literal, lexeme: String)
-  Comment
-  Basic(BasicToken)
-}
-
 fn basic_token_to_pattern(basic_token: BasicToken) -> String {
   case basic_token {
     Paren(Left) -> "("
@@ -122,6 +155,22 @@ fn basic_token_to_pattern(basic_token: BasicToken) -> String {
   }
 }
 
+fn match_basic_token(basic_token: BasicToken) -> Lexer(Token) {
+  fn(in) {
+    let pattern = basic_token_to_pattern(basic_token)
+    use #(in, _) <- result.map(tag(pattern)(in))
+    #(in, Basic(basic_token))
+  }
+}
+
+type Token {
+  Ident(String)
+  Literal(literal: Literal, lexeme: String)
+  Comment
+  Keyword(KeywordToken, lexeme: String)
+  Basic(BasicToken)
+}
+
 fn token_to_string(token: Token) -> String {
   case token {
     Ident(ident) -> "IDENTIFIER " <> ident <> " null"
@@ -132,6 +181,8 @@ fn token_to_string(token: Token) -> String {
       "NUMBER " <> lexeme <> " " <> float.to_string(number)
 
     Comment -> ""
+
+    Keyword(_, lexeme) -> string.uppercase(lexeme) <> " " <> lexeme <> " null"
 
     Basic(basic_token) -> {
       let name = case basic_token {
@@ -145,14 +196,6 @@ fn token_to_string(token: Token) -> String {
       }
       name <> " " <> basic_token_to_pattern(basic_token) <> " null"
     }
-  }
-}
-
-fn match_basic_token(basic_token: BasicToken) -> Lexer(Token) {
-  fn(in) {
-    let pattern = basic_token_to_pattern(basic_token)
-    use #(in, _) <- result.map(tag(pattern)(in))
-    #(in, Basic(basic_token))
   }
 }
 
@@ -233,6 +276,7 @@ pub fn scan(in: String) -> Return {
     |> list.prepend(string_literal)
     |> list.prepend(number_literal)
     |> list.prepend(ident)
+    |> { function.flip(list.append) }(list.map(keywords, match_keyword))
     |> any
     |> label_error(fn(in) {
       let unexpected = in |> string.first |> result.unwrap("")
@@ -356,6 +400,16 @@ fn tag(tag: String) -> Lexer(Nil) {
   fn(in) {
     case string.starts_with(in, tag) {
       True -> Ok(#(string.drop_left(in, string.length(tag)), Nil))
+      _ -> Error(TagError(tag))
+    }
+  }
+}
+
+fn tag_no_case(tag: String) -> Lexer(String) {
+  fn(in) {
+    let substr = string.slice(in, 0, string.length(tag))
+    case string.lowercase(substr) == string.lowercase(tag) {
+      True -> Ok(#(string.drop_left(in, string.length(tag)), substr))
       _ -> Error(TagError(tag))
     }
   }
