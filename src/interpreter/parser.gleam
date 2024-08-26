@@ -12,6 +12,8 @@ pub fn parse(tokens: List(common.Token)) -> common.Return {
       common.Return(out: "nil", error: "")
     [common.Literal(common.LiteralNumber(number), _), ..] ->
       common.Return(out: float.to_string(number), error: "")
+    [common.Literal(common.LiteralString, lexeme), ..] ->
+      common.Return(out: lexeme, error: "")
     _ -> common.Return(out: "", error: "unknown")
   }
 }
