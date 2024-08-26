@@ -1,11 +1,11 @@
-import interpreter/common.{type Return, Return}
+import interpreter/common
 
 import gleam/bool
 import gleam/float
 import gleam/function
 import gleam/int
 import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option
 import gleam/pair
 import gleam/result
 import gleam/string
@@ -45,199 +45,119 @@ type LexResult(a) =
 type Lexer(a) =
   fn(String) -> LexResult(a)
 
-pub type Dir {
-  Left
-  Right
-}
-
-fn dir_to_string(dir: Dir) -> String {
+fn dir_to_string(dir: common.Dir) -> String {
   case dir {
-    Left -> "LEFT"
-    Right -> "RIGHT"
+    common.Left -> "LEFT"
+    _ -> "RIGHT"
   }
 }
 
-pub type Literal {
-  LiteralString
-  LiteralNumber(Float)
-}
-
-pub type KeywordToken {
-  KeywordAnd
-  KeywordClass
-  KeywordElse
-  KeywordFalse
-  KeywordFor
-  KeywordFun
-  KeywordIf
-  KeywordNil
-  KeywordOr
-  KeywordPrint
-  KeywordReturn
-  KeywordSuper
-  KeywordThis
-  KeywordTrue
-  KeywordVar
-  KeywordWhile
-}
-
 const keywords = [
-  KeywordAnd, KeywordClass, KeywordElse, KeywordFalse, KeywordFor, KeywordFun,
-  KeywordIf, KeywordNil, KeywordOr, KeywordPrint, KeywordReturn, KeywordSuper,
-  KeywordThis, KeywordTrue, KeywordVar, KeywordWhile,
+  common.KeywordAnd, common.KeywordClass, common.KeywordElse,
+  common.KeywordFalse, common.KeywordFor, common.KeywordFun, common.KeywordIf,
+  common.KeywordNil, common.KeywordOr, common.KeywordPrint, common.KeywordReturn,
+  common.KeywordSuper, common.KeywordThis, common.KeywordTrue, common.KeywordVar,
+  common.KeywordWhile,
 ]
 
-fn keyword_to_pattern(keyword: KeywordToken) -> String {
+fn keyword_to_pattern(keyword: common.KeywordToken) -> String {
   keyword
   |> string.inspect
   |> string.drop_left(string.length("Keyword"))
   |> string.lowercase
 }
 
-fn match_keyword(keyword: KeywordToken) -> Lexer(Token) {
+fn match_keyword(keyword: common.KeywordToken) -> Lexer(common.Token) {
   fn(in) {
     let pattern = keyword_to_pattern(keyword)
     use #(in, _) <- result.map(tag(pattern)(in))
-    #(in, Keyword(keyword, pattern))
+    #(in, common.Keyword(keyword, pattern))
   }
-}
-
-pub type BasicToken {
-  Paren(Dir)
-  Brace(Dir)
-  EqualEqual
-  BangEqual
-  LessEqual
-  GreaterEqual
-  Space
-  Tab
-  Newline
-  Equal
-  Bang
-  Less
-  Greater
-  Star
-  Dot
-  Comma
-  Plus
-  Minus
-  Slash
-  Semicolon
 }
 
 const basic_tokens = [
-  Paren(Left), Paren(Right), Brace(Left), Brace(Right), EqualEqual, BangEqual,
-  LessEqual, GreaterEqual, Space, Tab, Newline, Equal, Bang, Less, Greater, Star,
-  Dot, Comma, Plus, Minus, Slash, Semicolon,
+  common.Paren(common.Left), common.Paren(common.Right),
+  common.Brace(common.Left), common.Brace(common.Right), common.EqualEqual,
+  common.BangEqual, common.LessEqual, common.GreaterEqual, common.Space,
+  common.Tab, common.Newline, common.Equal, common.Bang, common.Less,
+  common.Greater, common.Star, common.Dot, common.Comma, common.Plus,
+  common.Minus, common.Slash, common.Semicolon,
 ]
 
-fn basic_token_to_pattern(basic_token: BasicToken) -> String {
-  case basic_token {
-    Paren(Left) -> "("
-    Paren(Right) -> ")"
-    Brace(Left) -> "{"
-    Brace(Right) -> "}"
-    EqualEqual -> "=="
-    BangEqual -> "!="
-    LessEqual -> "<="
-    GreaterEqual -> ">="
-    Space -> " "
-    Tab -> "\t"
-    Newline -> "\n"
-    Equal -> "="
-    Bang -> "!"
-    Less -> "<"
-    Greater -> ">"
-    Star -> "*"
-    Dot -> "."
-    Comma -> ","
-    Plus -> "+"
-    Minus -> "-"
-    Slash -> "/"
-    Semicolon -> ";"
-  }
-}
-
-fn match_basic_token(basic_token: BasicToken) -> Lexer(Token) {
+fn match_basic_token(basic_token: common.BasicToken) -> Lexer(common.Token) {
   fn(in) {
-    let pattern = basic_token_to_pattern(basic_token)
+    let pattern = common.basic_token_to_pattern(basic_token)
     use #(in, _) <- result.map(tag(pattern)(in))
-    #(in, Basic(basic_token))
+    #(in, common.Basic(basic_token))
   }
 }
 
-pub type Token {
-  Ident(String)
-  Literal(literal: Literal, lexeme: String)
-  Comment
-  Keyword(KeywordToken, lexeme: String)
-  Basic(BasicToken)
-}
-
-fn token_to_string(token: Token) -> String {
+fn token_to_string(token: common.Token) -> String {
   case token {
-    Ident(ident) -> "IDENTIFIER " <> ident <> " null"
+    common.Ident(ident) -> "IDENTIFIER " <> ident <> " null"
 
-    Literal(LiteralString, lexeme) -> "STRING \"" <> lexeme <> "\" " <> lexeme
+    common.Literal(common.LiteralString, lexeme) ->
+      "STRING \"" <> lexeme <> "\" " <> lexeme
 
-    Literal(LiteralNumber(number), lexeme) ->
+    common.Literal(common.LiteralNumber(number), lexeme) ->
       "NUMBER " <> lexeme <> " " <> float.to_string(number)
 
-    Comment -> ""
+    common.Comment -> ""
 
-    Keyword(_, lexeme) -> string.uppercase(lexeme) <> " " <> lexeme <> " null"
+    common.Keyword(_, lexeme) ->
+      string.uppercase(lexeme) <> " " <> lexeme <> " null"
 
-    Basic(basic_token) -> {
+    common.Basic(basic_token) -> {
       let name = case basic_token {
-        Paren(dir) -> dir_to_string(dir) <> "_PAREN"
-        Brace(dir) -> dir_to_string(dir) <> "_BRACE"
-        EqualEqual -> "EQUAL_EQUAL"
-        BangEqual -> "BANG_EQUAL"
-        LessEqual -> "LESS_EQUAL"
-        GreaterEqual -> "GREATER_EQUAL"
+        common.Paren(dir) -> dir_to_string(dir) <> "_PAREN"
+        common.Brace(dir) -> dir_to_string(dir) <> "_BRACE"
+        common.EqualEqual -> "EQUAL_EQUAL"
+        common.BangEqual -> "BANG_EQUAL"
+        common.LessEqual -> "LESS_EQUAL"
+        common.GreaterEqual -> "GREATER_EQUAL"
         basic_token -> basic_token |> string.inspect |> string.uppercase
       }
-      name <> " " <> basic_token_to_pattern(basic_token) <> " null"
+      name <> " " <> common.basic_token_to_pattern(basic_token) <> " null"
     }
   }
 }
 
-fn comment(in: String) -> LexResult(Token) {
+fn comment(in: String) -> LexResult(common.Token) {
   use #(in, _) <- result.map(tag("//")(in))
   case string.split_once(in, "\n") {
-    Ok(#(_, in)) -> #("\n" <> in, Comment)
-    _ -> #("", Comment)
+    Ok(#(_, in)) -> #("\n" <> in, common.Comment)
+    _ -> #("", common.Comment)
   }
 }
 
-fn string_literal(in: String) -> LexResult(Token) {
+fn string_literal(in: String) -> LexResult(common.Token) {
   use #(in, _) <- result.try(tag("\"")(in))
   let until_result = in |> until("\"") |> result.map_error(ShortCircuitAny)
   use #(in, contents) <- result.map(until_result)
-  #(in, Literal(LiteralString, contents))
+  #(in, common.Literal(common.LiteralString, contents))
 }
 
-fn number_literal(in: String) -> LexResult(Token) {
+fn number_literal(in: String) -> LexResult(common.Token) {
   let is_digit = fn(c) { result.is_ok(int.parse(c)) }
   let assert Ok(#(in, digits)) = while(is_digit)(in)
   use <- bool.guard(digits == "", Error(InvalidNumberError))
   let assert Ok(#(in, maybe_decimal)) = maybe(tag("."))(in)
   case maybe_decimal {
-    Some(_) -> {
+    option.Some(_) -> {
       let assert Ok(#(in, decimal_digits)) = while(is_digit)(in)
       use <- bool.guard(decimal_digits == "", Error(InvalidNumberError))
       let all_digits = digits <> "." <> decimal_digits
       let assert Ok(number) = float.parse(all_digits)
-      Ok(#(in, Literal(LiteralNumber(number), all_digits)))
+      Ok(#(in, common.Literal(common.LiteralNumber(number), all_digits)))
     }
-    None -> {
+    option.None -> {
       let assert Ok(number) = digits |> int.parse |> result.map(int.to_float)
-      Ok(#(in, Literal(LiteralNumber(number), digits)))
+      Ok(#(in, common.Literal(common.LiteralNumber(number), digits)))
     }
   }
 }
 
-fn ident(in: String) -> LexResult(Token) {
+fn ident(in: String) -> LexResult(common.Token) {
   let #(a, z, underscore) = #(97, 122, 95)
   let #(a_up, z_up) = #(a - 32, z - 32)
   let is_alpha = fn(c) {
@@ -259,7 +179,7 @@ fn ident(in: String) -> LexResult(Token) {
     True -> {
       let assert Ok(#(in, remainder)) =
         while(fn(c) { is_alphanumeric(to_codepoint(c)) })(in)
-      Ok(#(in, Ident(first <> remainder)))
+      Ok(#(in, common.Ident(first <> remainder)))
     }
     _ -> {
       Error(IdentError)
@@ -267,7 +187,7 @@ fn ident(in: String) -> LexResult(Token) {
   }
 }
 
-fn matcher() -> Lexer(Token) {
+fn matcher() -> Lexer(common.Token) {
   basic_tokens
   |> list.map(match_basic_token)
   |> list.prepend(comment)
@@ -278,11 +198,11 @@ fn matcher() -> Lexer(Token) {
   |> any
 }
 
-pub fn scan(in: String) -> Return {
+pub fn scan(in: String) -> common.Return {
   tokenized_to_return(tokenize(in, matcher()))
 }
 
-pub fn lex(in: String) -> Result(List(Token), String) {
+pub fn lex(in: String) -> Result(List(common.Token), String) {
   tokenize(in, matcher())
   |> list.try_map(fn(tokenized) {
     case tokenized {
@@ -308,7 +228,7 @@ fn tokenized_error_to_string(error: TokenizedError) -> String {
 }
 
 type Tokenized {
-  Token(Token)
+  Token(common.Token)
   TokenizedError(line: Int, error: TokenizedError)
   Eof
 }
@@ -332,31 +252,35 @@ fn tokenized_to_string(tokenized: Tokenized) -> String {
   }
 }
 
-fn tokenized_to_return(tokenized: List(Tokenized)) -> Return {
-  do_tokenized_to_return(tokenized, Return("", ""))
+fn tokenized_to_return(tokenized: List(Tokenized)) -> common.Return {
+  do_tokenized_to_return(tokenized, common.Return("", ""))
 }
 
-fn do_tokenized_to_return(tokenized: List(Tokenized), return: Return) -> Return {
+fn do_tokenized_to_return(
+  tokenized: List(Tokenized),
+  return: common.Return,
+) -> common.Return {
   case tokenized {
     [] -> return
     [first, ..rest] -> {
       let stringified = tokenized_to_string(first)
       let return = case tokenized_is_error(first) {
-        True -> Return(..return, error: stringified <> "\n" <> return.error)
-        _ -> Return(..return, out: stringified <> "\n" <> return.out)
+        True ->
+          common.Return(..return, error: stringified <> "\n" <> return.error)
+        _ -> common.Return(..return, out: stringified <> "\n" <> return.out)
       }
       do_tokenized_to_return(rest, return)
     }
   }
 }
 
-fn tokenize(in: String, matcher: Lexer(Token)) -> List(Tokenized) {
+fn tokenize(in: String, matcher: Lexer(common.Token)) -> List(Tokenized) {
   do_tokenize(in, matcher, 1, [])
 }
 
 fn do_tokenize(
   in: String,
-  matcher: Lexer(Token),
+  matcher: Lexer(common.Token),
   line: Int,
   tokenized: List(Tokenized),
 ) -> List(Tokenized) {
@@ -365,11 +289,13 @@ fn do_tokenize(
 
     _ -> {
       case matcher(in) {
-        Ok(#(in, Comment)) | Ok(#(in, Basic(Space))) | Ok(#(in, Basic(Tab))) -> {
+        Ok(#(in, common.Comment))
+        | Ok(#(in, common.Basic(common.Space)))
+        | Ok(#(in, common.Basic(common.Tab))) -> {
           do_tokenize(in, matcher, line, tokenized)
         }
 
-        Ok(#(in, Basic(Newline))) -> {
+        Ok(#(in, common.Basic(common.Newline))) -> {
           do_tokenize(in, matcher, line + 1, tokenized)
         }
 
@@ -452,12 +378,12 @@ fn while_inner(
   }
 }
 
-fn maybe(lexer: Lexer(a)) -> Lexer(Option(a)) {
+fn maybe(lexer: Lexer(a)) -> Lexer(option.Option(a)) {
   fn(in) {
     in
     |> lexer
-    |> result.map(pair.map_second(_, Some))
-    |> result.try_recover(fn(_) { Ok(#(in, None)) })
+    |> result.map(pair.map_second(_, option.Some))
+    |> result.try_recover(fn(_) { Ok(#(in, option.None)) })
   }
 }
 

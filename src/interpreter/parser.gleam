@@ -1,13 +1,17 @@
-import interpreter/common.{type Return, Return}
-import interpreter/lexer.{
-  type Token, Keyword, KeywordFalse, KeywordNil, KeywordTrue,
-}
+import interpreter/common
 
-pub fn parse(tokens: List(Token)) -> Return {
+import gleam/float
+
+pub fn parse(tokens: List(common.Token)) -> common.Return {
   case tokens {
-    [Keyword(KeywordTrue, _), ..] -> Return(out: "true", error: "")
-    [Keyword(KeywordFalse, _), ..] -> Return(out: "false", error: "")
-    [Keyword(KeywordNil, _), ..] -> Return(out: "nil", error: "")
-    _ -> Return(out: "", error: "unknown")
+    [common.Keyword(common.KeywordTrue, _), ..] ->
+      common.Return(out: "true", error: "")
+    [common.Keyword(common.KeywordFalse, _), ..] ->
+      common.Return(out: "false", error: "")
+    [common.Keyword(common.KeywordNil, _), ..] ->
+      common.Return(out: "nil", error: "")
+    [common.Literal(common.LiteralNumber(number), _), ..] ->
+      common.Return(out: float.to_string(number), error: "")
+    _ -> common.Return(out: "", error: "unknown")
   }
 }
