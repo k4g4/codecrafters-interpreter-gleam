@@ -9,7 +9,9 @@ import gleam/string
 
 type LexError {
   InvalidNumberError
+  IdentError
   TagError(String)
+  IsError
   UntilError(String)
   OrError(LexError, LexError)
   AnyError
@@ -19,8 +21,10 @@ type LexError {
 
 fn lex_error_to_string(error: LexError) -> String {
   case error {
-    InvalidNumberError -> "invalid number"
+    InvalidNumberError -> "invalidnumber"
+    IdentError -> "ident"
     TagError(tag) -> "tag(" <> tag <> ")"
+    IsError -> "is"
     UntilError(until) -> "until(" <> until <> ")"
     OrError(first, second) ->
       "("
@@ -87,6 +91,7 @@ const basic_tokens = [
 ]
 
 type Token {
+  Ident(String)
   Literal(literal: Literal, lexeme: String)
   Comment
   Basic(BasicToken)
@@ -121,6 +126,8 @@ fn basic_token_to_pattern(basic_token: BasicToken) -> String {
 
 fn token_to_string(token: Token) -> String {
   case token {
+    Ident(ident) -> "IDENTIFIER " <> ident <> " null"
+
     Literal(LiteralString, lexeme) -> "STRING \"" <> lexeme <> "\" " <> lexeme
 
     Literal(LiteralNumber(number), lexeme) ->
@@ -186,6 +193,36 @@ fn number_literal(in: String) -> LexResult(Token) {
   }
 }
 
+fn ident(in: String) -> LexResult(Token) {
+  let #(a, z, underscore) = #(97, 122, 95)
+  let #(a_up, z_up) = #(a - 32, z - 32)
+  let is_alpha = fn(c) {
+    { c >= a && c <= z } || { c >= a_up && c <= z_up } || c == underscore
+  }
+  let #(zero, nine) = #(48, 57)
+  let is_alphanumeric = fn(c) { is_alpha(c) || { c >= zero && c <= nine } }
+  let to_codepoint = fn(c) {
+    c
+    |> string.to_utf_codepoints
+    |> list.first
+    |> result.lazy_unwrap(fn() { panic })
+    |> string.utf_codepoint_to_int
+  }
+  let pop_result =
+    in |> string.pop_grapheme |> result.map_error(fn(_) { IdentError })
+  use #(first, in) <- result.try(pop_result)
+  case is_alpha(to_codepoint(first)) {
+    True -> {
+      let assert Ok(#(in, remainder)) =
+        while(fn(c) { is_alphanumeric(to_codepoint(c)) })(in)
+      Ok(#(in, Ident(first <> remainder)))
+    }
+    _ -> {
+      Error(IdentError)
+    }
+  }
+}
+
 pub type Return {
   Return(out: String, error: String)
 }
@@ -197,6 +234,7 @@ pub fn scan(in: String) -> Return {
     |> list.prepend(comment)
     |> list.prepend(string_literal)
     |> list.prepend(number_literal)
+    |> list.prepend(ident)
     |> any
     |> label_error(fn(in) {
       let unexpected = in |> string.first |> result.unwrap("")
@@ -321,6 +359,17 @@ fn tag(tag: String) -> Lexer(Nil) {
     case string.starts_with(in, tag) {
       True -> Ok(#(string.drop_left(in, string.length(tag)), Nil))
       _ -> Error(TagError(tag))
+    }
+  }
+}
+
+fn is(f: fn(String) -> Bool) -> Lexer(String) {
+  fn(in) {
+    let first_result = in |> string.first |> result.map_error(fn(_) { IsError })
+    use first <- result.try(first_result)
+    case f(first) {
+      True -> Ok(#(string.drop_left(in, 1), first))
+      _ -> Error(IsError)
     }
   }
 }
