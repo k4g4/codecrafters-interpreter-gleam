@@ -182,7 +182,7 @@ fn token_to_string(token: Token) -> String {
 
     Comment -> ""
 
-    Keyword(_, lexeme) -> "IDENTIFIER" <> " " <> lexeme <> " null"
+    Keyword(_, lexeme) -> string.uppercase(lexeme) <> " " <> lexeme <> " null"
 
     Basic(basic_token) -> {
       let name = case basic_token {
