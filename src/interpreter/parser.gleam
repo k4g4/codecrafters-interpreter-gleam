@@ -27,20 +27,27 @@ type TokenTree {
 
 type TreeType {
   Group
+  Negate
+  Not
 }
 
 fn tree_type_to_string(tree_type: TreeType) -> String {
   case tree_type {
     Group -> "group"
+    Negate -> "-"
+    Not -> "!"
   }
 }
 
 fn token_tree_to_string(token_tree: TokenTree) -> String {
   case token_tree {
     Node(tree_type, token_trees) -> {
-      let stringified_trees =
-        token_trees |> list.map(token_tree_to_string) |> string.join(" ")
-      "(" <> tree_type_to_string(tree_type) <> " " <> stringified_trees <> ")"
+      let stringified =
+        token_trees
+        |> list.map(token_tree_to_string)
+        |> list.prepend(tree_type_to_string(tree_type))
+        |> string.join(" ")
+      "(" <> stringified <> ")"
     }
     Leaf(token) -> token_to_string(token)
   }
@@ -73,7 +80,7 @@ pub fn parse(tokens: Tokens) -> common.Return {
 }
 
 fn token_tree(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  any([group, token_leaf])(tokens)
+  any([group, negate, not, token_leaf])(tokens)
 }
 
 fn group(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -82,6 +89,14 @@ fn group(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
   tokens
   |> enclosed(left, token_tree, right)
   |> result.map(pair.map_second(_, Node(Group, _)))
+}
+
+fn negate(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
+  prefix(token(common.Basic(common.Minus)), token_tree)(tokens)
+}
+
+fn not(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
+  prefix(token(common.Basic(common.Bang)), token_tree)(tokens)
 }
 
 fn token_leaf(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -125,6 +140,7 @@ fn enclosed(
   fn(tokens) {
     use #(tokens, _) <- result.try(left(tokens))
     enclosed_inner(middle, right, tokens, [])
+    |> result.map(pair.map_second(_, list.reverse))
   }
 }
 
@@ -140,5 +156,12 @@ fn enclosed_inner(
       use #(tokens, item) <- result.try(middle(tokens))
       enclosed_inner(middle, right, tokens, [item, ..acc])
     }
+  }
+}
+
+fn prefix(pre: Parser(a), parser: Parser(b)) -> Parser(b) {
+  fn(tokens) {
+    use #(tokens, _) <- result.try(pre(tokens))
+    parser(tokens)
   }
 }
