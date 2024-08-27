@@ -1,7 +1,6 @@
-import gleam/bool
-import gleam/function
 import interpreter/common
 
+import gleam/bool
 import gleam/float
 import gleam/list
 import gleam/pair
@@ -148,9 +147,8 @@ fn traverse_trees(parser: Parser(Tree, Tree)) -> Parser(Tree, Trees) {
     let parser =
       parser
       |> maybe
-      |> recover
+      |> recover(take_one)
       |> collect
-      |> map(list.filter_map(_, function.identity))
     let traverse = fn(trees) {
       use #(trees, tree) <- result.try(take_one(trees))
       case tree {
@@ -184,16 +182,15 @@ fn maybe(parser: Parser(in, out)) -> Parser(in, Result(out, Nil)) {
   }
 }
 
-fn recover(parser: Parser(in, Result(out, e))) -> Parser(in, Result(out, e)) {
+fn recover(
+  try: Parser(in, Result(out, _)),
+  recover: Parser(in, out),
+) -> Parser(in, out) {
   fn(in) {
-    use #(in, res) <- result.try(parser(in))
+    use #(in, res) <- result.try(try(in))
     case res {
-      Ok(_) -> Ok(#(in, res))
-      _ ->
-        case in {
-          [_, ..in] -> Ok(#(in, res))
-          _ -> Error(ExhaustedInput)
-        }
+      Ok(out) -> Ok(#(in, out))
+      _ -> recover(in)
     }
   }
 }
