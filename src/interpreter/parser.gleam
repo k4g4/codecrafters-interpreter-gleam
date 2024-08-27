@@ -29,6 +29,8 @@ type TreeType {
   Group
   Negate
   Not
+  Mul
+  Div
 }
 
 fn tree_type_to_string(tree_type: TreeType) -> String {
@@ -36,6 +38,8 @@ fn tree_type_to_string(tree_type: TreeType) -> String {
     Group -> "group"
     Negate -> "-"
     Not -> "!"
+    Mul -> "*"
+    Div -> "/"
   }
 }
 
@@ -80,7 +84,7 @@ pub fn parse(tokens: Tokens) -> common.Return {
 }
 
 fn token_tree(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  any([group, negate, not, token_leaf])(tokens)
+  any([group, negate, not, mul, div, token_leaf])(tokens)
 }
 
 fn group(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -103,6 +107,20 @@ fn not(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
     prefix(token(common.Basic(common.Bang)), token_tree)(tokens)
   use #(tokens, token_tree) <- result.map(prefix_result)
   #(tokens, Node(Not, [token_tree]))
+}
+
+fn mul(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
+  let infix_result =
+    infix(token_tree, token(common.Basic(common.Star)), token_tree)(tokens)
+  use #(tokens, #(left, right)) <- result.map(infix_result)
+  #(tokens, Node(Mul, [left, right]))
+}
+
+fn div(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
+  let infix_result =
+    infix(token_tree, token(common.Basic(common.Slash)), token_tree)(tokens)
+  use #(tokens, #(left, right)) <- result.map(infix_result)
+  #(tokens, Node(Div, [left, right]))
 }
 
 fn token_leaf(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -169,5 +187,14 @@ fn prefix(pre: Parser(a), parser: Parser(b)) -> Parser(b) {
   fn(tokens) {
     use #(tokens, _) <- result.try(pre(tokens))
     parser(tokens)
+  }
+}
+
+fn infix(left: Parser(a), in: Parser(b), right: Parser(c)) -> Parser(#(a, c)) {
+  fn(tokens) {
+    use #(tokens, left) <- result.try(left(tokens))
+    use #(tokens, _) <- result.try(in(tokens))
+    use #(tokens, right) <- result.try(right(tokens))
+    Ok(#(tokens, #(left, right)))
   }
 }
