@@ -92,11 +92,17 @@ fn group(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
 }
 
 fn negate(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  prefix(token(common.Basic(common.Minus)), token_tree)(tokens)
+  let prefix_result =
+    prefix(token(common.Basic(common.Minus)), token_tree)(tokens)
+  use #(tokens, token_tree) <- result.map(prefix_result)
+  #(tokens, Node(Negate, [token_tree]))
 }
 
 fn not(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  prefix(token(common.Basic(common.Bang)), token_tree)(tokens)
+  let prefix_result =
+    prefix(token(common.Basic(common.Bang)), token_tree)(tokens)
+  use #(tokens, token_tree) <- result.map(prefix_result)
+  #(tokens, Node(Not, [token_tree]))
 }
 
 fn token_leaf(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
