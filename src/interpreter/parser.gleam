@@ -108,11 +108,10 @@ pub fn parse(tokens: Tokens) -> common.Return {
 fn do_parse(tokens: Tokens) -> Result(Trees, ParseError) {
   use #(tokens, flat) <- result.try(flat(tokens))
   use <- bool.guard(tokens != [], Error(UnexpectedInput))
-  use #(flat, grouped) <- result.try(traverse_trees(grouped)(flat))
-  use <- bool.guard(flat != [], Error(UnexpectedInput))
-  use #(grouped, prefixed) <- result.try(traverse_trees(prefixed)(grouped))
-  use <- bool.guard(grouped != [], Error(UnexpectedInput))
-  Ok(prefixed)
+  let stages = [grouped, prefixed, infixed]
+  list.try_fold(stages, flat, fn(trees, stage) {
+    traverse_trees(stage)(trees) |> result.map(pair.second)
+  })
 }
 
 fn flat(tokens: Tokens) -> Result(#(Tokens, Trees), ParseError) {
@@ -120,15 +119,7 @@ fn flat(tokens: Tokens) -> Result(#(Tokens, Trees), ParseError) {
 }
 
 fn grouped(trees: Trees) -> Result(#(Trees, Tree), ParseError) {
-  any([
-    map(parens, Node(Group, _)),
-    map(take_one, fn(tree) {
-      case tree {
-        Leaf(token) -> Leaf(token)
-        _ -> panic
-      }
-    }),
-  ])(trees)
+  any([map(parens, Node(Group, _)), take_one])(trees)
 }
 
 fn parens(trees: Trees) -> Result(#(Trees, Trees), ParseError) {
@@ -137,9 +128,25 @@ fn parens(trees: Trees) -> Result(#(Trees, Trees), ParseError) {
 }
 
 fn prefixed(trees: Trees) -> Result(#(Trees, Tree), ParseError) {
-  let prefix = fn(basic) { prefix(one(Leaf(common.Basic(basic))), take(1)) }
-  let #(not, neg) = #(prefix(common.Bang), prefix(common.Minus))
-  any([map(not, Node(Prefix(Not), _)), map(neg, Node(Prefix(Neg), _))])(trees)
+  let parser = fn(basic, prefix_type) {
+    let pre = one(Leaf(common.Basic(basic)))
+    map(prefix(pre, take(1)), Node(Prefix(prefix_type), _))
+  }
+  any([parser(common.Bang, Not), parser(common.Minus, Neg)])(trees)
+}
+
+fn infixed(trees: Trees) -> Result(#(Trees, Tree), ParseError) {
+  let parser = fn(basic, infix_type) {
+    let mid = one(Leaf(common.Basic(basic)))
+    use #(left, right) <- map(infix(take_one, mid, take_one))
+    Node(Infix(infix_type), [left, right])
+  }
+  any([
+    parser(common.Star, Mul),
+    parser(common.Slash, Div),
+    parser(common.Plus, Add),
+    parser(common.Minus, Sub),
+  ])(trees)
 }
 
 fn traverse_trees(parser: Parser(Tree, Tree)) -> Parser(Tree, Trees) {
@@ -153,8 +160,8 @@ fn traverse_trees(parser: Parser(Tree, Tree)) -> Parser(Tree, Trees) {
       use #(trees, tree) <- result.try(take_one(trees))
       case tree {
         Node(node, in) -> {
-          use #(_, out) <- result.try(parser(in))
-          Ok(#(trees, Node(node, out)))
+          use #(_, out) <- result.map(parser(in))
+          #(trees, Node(node, out))
         }
         Leaf(token) -> Ok(#(trees, Leaf(token)))
       }
@@ -292,6 +299,19 @@ fn prefix(pre: Parser(in, _), parser: Parser(in, out)) -> Parser(in, out) {
   fn(in) {
     use #(in, _) <- result.try(pre(in))
     parser(in)
+  }
+}
+
+fn infix(
+  pre: Parser(in, left),
+  mid: Parser(in, _),
+  post: Parser(in, right),
+) -> Parser(in, #(left, right)) {
+  fn(in) {
+    use #(in, left) <- result.try(pre(in))
+    use #(in, _) <- result.try(mid(in))
+    use #(in, right) <- result.map(post(in))
+    #(in, #(left, right))
   }
 }
 // fn one_of(parsers: List(#(tag, Parser(in, out)))) -> Parser(in, #(tag, out)) {
