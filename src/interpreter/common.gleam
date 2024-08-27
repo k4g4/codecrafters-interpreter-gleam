@@ -65,6 +65,13 @@ pub type KeywordToken {
   KeywordWhile
 }
 
+pub fn keyword_to_pattern(keyword: KeywordToken) -> String {
+  keyword
+  |> string.inspect
+  |> string.drop_left(string.length("Keyword"))
+  |> string.lowercase
+}
+
 pub type Dir {
   Left
   Right

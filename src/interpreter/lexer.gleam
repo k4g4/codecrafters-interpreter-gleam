@@ -53,16 +53,9 @@ const keywords = [
   common.KeywordWhile,
 ]
 
-fn keyword_to_pattern(keyword: common.KeywordToken) -> String {
-  keyword
-  |> string.inspect
-  |> string.drop_left(string.length("Keyword"))
-  |> string.lowercase
-}
-
 fn match_keyword(keyword: common.KeywordToken) -> Lexer(common.Token) {
   fn(in) {
-    let pattern = keyword_to_pattern(keyword)
+    let pattern = common.keyword_to_pattern(keyword)
     use #(in, _) <- result.map(tag(pattern)(in))
     #(in, common.Keyword(keyword, pattern))
   }

@@ -1,4 +1,4 @@
-import interpreter/common.{Return}
+import interpreter/common
 import interpreter/lexer
 import interpreter/parser
 
@@ -42,7 +42,7 @@ pub fn main() {
 }
 
 fn tokenize(in: String) -> Nil {
-  let Return(out, error) = lexer.scan(in)
+  let common.Return(out, error) = lexer.scan(in)
   case error {
     "" -> Nil
     _ -> io.print_error(error)
@@ -64,7 +64,7 @@ fn parse(in: String) -> Nil {
       exit(1)
     }
     Ok(tokens) -> {
-      let Return(out, error) = parser.parse(tokens)
+      let common.Return(out, error) = parser.parse(tokens)
       case error {
         "" -> Nil
         _ -> io.print_error(error)

@@ -7,8 +7,10 @@ import gleam/string
 
 fn token_to_string(token: common.Token) -> String {
   case token {
-    common.Literal(common.LiteralString, lexeme) -> lexeme
-    _ -> panic
+    common.Ident(ident) -> ident
+    common.Literal(_, lexeme) | common.Keyword(_, lexeme) -> lexeme
+    common.Comment -> ""
+    common.Basic(basic_token) -> common.basic_token_to_pattern(basic_token)
   }
 }
 
