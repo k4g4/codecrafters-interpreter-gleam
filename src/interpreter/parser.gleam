@@ -1,5 +1,6 @@
 import interpreter/common
 
+import gleam/bool
 import gleam/float
 import gleam/list
 import gleam/pair
@@ -29,8 +30,8 @@ type TreeType {
   Group
   Negate
   Not
-  Mul
   Div
+  Mul
 }
 
 fn tree_type_to_string(tree_type: TreeType) -> String {
@@ -38,8 +39,8 @@ fn tree_type_to_string(tree_type: TreeType) -> String {
     Group -> "group"
     Negate -> "-"
     Not -> "!"
-    Mul -> "*"
     Div -> "/"
+    Mul -> "*"
   }
 }
 
@@ -61,6 +62,7 @@ type ParseError {
   ExhaustedTokens
   ExpectedToken(common.Token)
   ExhaustedParsers
+  UnexpectedTokens
 }
 
 fn parse_error_to_string(error: ParseError) -> String {
@@ -68,6 +70,7 @@ fn parse_error_to_string(error: ParseError) -> String {
     ExhaustedTokens -> "expected more tokens"
     ExpectedToken(token) -> "expected token: " <> common.token_to_string(token)
     ExhaustedParsers -> "exhausted all parsers"
+    UnexpectedTokens -> "unexpected tokens while parsing"
   }
 }
 
@@ -84,7 +87,7 @@ pub fn parse(tokens: Tokens) -> common.Return {
 }
 
 fn token_tree(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  any([group, negate, not, mul, div, token_leaf])(tokens)
+  any([group, negate, not, div, mul, token_leaf])(tokens)
 }
 
 fn group(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -109,18 +112,18 @@ fn not(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
   #(tokens, Node(Not, [token_tree]))
 }
 
-fn mul(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  let infix_result =
-    infix(token_tree, token(common.Basic(common.Star)), token_tree)(tokens)
-  use #(tokens, #(left, right)) <- result.map(infix_result)
-  #(tokens, Node(Mul, [left, right]))
-}
-
 fn div(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
   let infix_result =
     infix(token_tree, token(common.Basic(common.Slash)), token_tree)(tokens)
   use #(tokens, #(left, right)) <- result.map(infix_result)
   #(tokens, Node(Div, [left, right]))
+}
+
+fn mul(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
+  let infix_result =
+    infix(token_tree, token(common.Basic(common.Star)), token_tree)(tokens)
+  use #(tokens, #(left, right)) <- result.map(infix_result)
+  #(tokens, Node(Mul, [left, right]))
 }
 
 fn token_leaf(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -157,10 +160,10 @@ fn any_inner(
 }
 
 fn enclosed(
-  left: Parser(a),
-  middle: Parser(b),
-  right: Parser(c),
-) -> Parser(List(b)) {
+  left: Parser(_),
+  middle: Parser(a),
+  right: Parser(_),
+) -> Parser(List(a)) {
   fn(tokens) {
     use #(tokens, _) <- result.try(left(tokens))
     enclosed_inner(middle, right, tokens, [])
@@ -170,7 +173,7 @@ fn enclosed(
 
 fn enclosed_inner(
   middle: Parser(a),
-  right: Parser(b),
+  right: Parser(_),
   tokens: Tokens,
   acc: List(a),
 ) -> Result(#(Tokens, List(a)), ParseError) {
@@ -183,18 +186,38 @@ fn enclosed_inner(
   }
 }
 
-fn prefix(pre: Parser(a), parser: Parser(b)) -> Parser(b) {
+fn prefix(pre: Parser(_), parser: Parser(a)) -> Parser(a) {
   fn(tokens) {
     use #(tokens, _) <- result.try(pre(tokens))
     parser(tokens)
   }
 }
 
-fn infix(left: Parser(a), in: Parser(b), right: Parser(c)) -> Parser(#(a, c)) {
+fn infix(left: Parser(a), in: Parser(_), right: Parser(b)) -> Parser(#(a, b)) {
   fn(tokens) {
-    use #(tokens, left) <- result.try(left(tokens))
+    use parsed_at <- result.try(parsed_at(tokens, in, Ok(0)))
+    let left_tokens = list.take(tokens, parsed_at)
+    let tokens = list.drop(tokens, parsed_at)
+    use #(left_tokens, left) <- result.try(left(left_tokens))
+    use <- bool.guard(left_tokens != [], Error(UnexpectedTokens))
     use #(tokens, _) <- result.try(in(tokens))
     use #(tokens, right) <- result.try(right(tokens))
     Ok(#(tokens, #(left, right)))
+  }
+}
+
+fn parsed_at(
+  tokens: Tokens,
+  parser: Parser(_),
+  acc: Result(Int, ParseError),
+) -> Result(Int, ParseError) {
+  case parser(tokens) {
+    Ok(_) -> acc
+    _ ->
+      case tokens {
+        [] -> Error(ExhaustedTokens)
+        [_, ..tokens] ->
+          parsed_at(tokens, parser, result.map(acc, fn(acc) { acc + 1 }))
+      }
   }
 }
