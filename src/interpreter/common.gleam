@@ -1,3 +1,6 @@
+import gleam/float
+import gleam/string
+
 pub type Return {
   Return(out: String, error: String)
 }
@@ -8,6 +11,34 @@ pub type Token {
   Comment
   Keyword(KeywordToken, lexeme: String)
   Basic(BasicToken)
+}
+
+pub fn token_to_string(token: Token) -> String {
+  case token {
+    Ident(ident) -> "IDENTIFIER " <> ident <> " null"
+
+    Literal(LiteralString, lexeme) -> "STRING \"" <> lexeme <> "\" " <> lexeme
+
+    Literal(LiteralNumber(number), lexeme) ->
+      "NUMBER " <> lexeme <> " " <> float.to_string(number)
+
+    Comment -> ""
+
+    Keyword(_, lexeme) -> string.uppercase(lexeme) <> " " <> lexeme <> " null"
+
+    Basic(basic_token) -> {
+      let name = case basic_token {
+        Paren(dir) -> dir_to_string(dir) <> "_PAREN"
+        Brace(dir) -> dir_to_string(dir) <> "_BRACE"
+        EqualEqual -> "EQUAL_EQUAL"
+        BangEqual -> "BANG_EQUAL"
+        LessEqual -> "LESS_EQUAL"
+        GreaterEqual -> "GREATER_EQUAL"
+        basic_token -> basic_token |> string.inspect |> string.uppercase
+      }
+      name <> " " <> basic_token_to_pattern(basic_token) <> " null"
+    }
+  }
 }
 
 pub type Literal {
@@ -37,6 +68,13 @@ pub type KeywordToken {
 pub type Dir {
   Left
   Right
+}
+
+fn dir_to_string(dir: Dir) -> String {
+  case dir {
+    Left -> "LEFT"
+    _ -> "RIGHT"
+  }
 }
 
 pub type BasicToken {

@@ -45,13 +45,6 @@ type LexResult(a) =
 type Lexer(a) =
   fn(String) -> LexResult(a)
 
-fn dir_to_string(dir: common.Dir) -> String {
-  case dir {
-    common.Left -> "LEFT"
-    _ -> "RIGHT"
-  }
-}
-
 const keywords = [
   common.KeywordAnd, common.KeywordClass, common.KeywordElse,
   common.KeywordFalse, common.KeywordFor, common.KeywordFun, common.KeywordIf,
@@ -89,36 +82,6 @@ fn match_basic_token(basic_token: common.BasicToken) -> Lexer(common.Token) {
     let pattern = common.basic_token_to_pattern(basic_token)
     use #(in, _) <- result.map(tag(pattern)(in))
     #(in, common.Basic(basic_token))
-  }
-}
-
-fn token_to_string(token: common.Token) -> String {
-  case token {
-    common.Ident(ident) -> "IDENTIFIER " <> ident <> " null"
-
-    common.Literal(common.LiteralString, lexeme) ->
-      "STRING \"" <> lexeme <> "\" " <> lexeme
-
-    common.Literal(common.LiteralNumber(number), lexeme) ->
-      "NUMBER " <> lexeme <> " " <> float.to_string(number)
-
-    common.Comment -> ""
-
-    common.Keyword(_, lexeme) ->
-      string.uppercase(lexeme) <> " " <> lexeme <> " null"
-
-    common.Basic(basic_token) -> {
-      let name = case basic_token {
-        common.Paren(dir) -> dir_to_string(dir) <> "_PAREN"
-        common.Brace(dir) -> dir_to_string(dir) <> "_BRACE"
-        common.EqualEqual -> "EQUAL_EQUAL"
-        common.BangEqual -> "BANG_EQUAL"
-        common.LessEqual -> "LESS_EQUAL"
-        common.GreaterEqual -> "GREATER_EQUAL"
-        basic_token -> basic_token |> string.inspect |> string.uppercase
-      }
-      name <> " " <> common.basic_token_to_pattern(basic_token) <> " null"
-    }
   }
 }
 
@@ -213,6 +176,7 @@ pub fn lex(in: String) -> Result(List(common.Token), String) {
     }
   })
   |> result.map(list.filter_map(_, function.identity))
+  |> result.map(list.reverse)
 }
 
 type TokenizedError {
@@ -242,7 +206,7 @@ fn tokenized_is_error(tokenized) -> Bool {
 
 fn tokenized_to_string(tokenized: Tokenized) -> String {
   case tokenized {
-    Token(token) -> token_to_string(token)
+    Token(token) -> common.token_to_string(token)
     TokenizedError(line, error) ->
       "[line "
       <> int.to_string(line)
