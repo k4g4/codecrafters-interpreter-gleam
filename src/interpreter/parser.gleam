@@ -32,8 +32,8 @@ type TreeType {
   Not
   Div
   Mul
-  Add
   Sub
+  Add
 }
 
 fn tree_type_to_string(tree_type: TreeType) -> String {
@@ -41,8 +41,8 @@ fn tree_type_to_string(tree_type: TreeType) -> String {
     Group -> "group"
     Neg -> "-"
     Not -> "!"
-    Div -> "/"
     Mul -> "*"
+    Div -> "/"
     Add -> "+"
     Sub -> "-"
   }
@@ -91,7 +91,7 @@ pub fn parse(tokens: Tokens) -> common.Return {
 }
 
 fn token_tree(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  any([group, negate, not, div, mul, add, sub, token_leaf])(tokens)
+  any([group, negate, not, mul_div, add_sub, token_leaf])(tokens)
 }
 
 fn group(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -114,31 +114,29 @@ fn not(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
   #(tokens, Node(Not, [token_tree]))
 }
 
-fn operator(
-  basic_token: common.BasicToken,
-  tree_type: TreeType,
+fn matched_operators(
+  operators: List(#(TreeType, Parser(_))),
 ) -> Parser(TokenTree) {
   fn(tokens) {
-    let parser = infix(token_tree, token(common.Basic(basic_token)), token_tree)
-    use #(tokens, #(left, right)) <- result.map(parser(tokens))
-    #(tokens, Node(tree_type, [left, right]))
+    let operators_parser = one_of(operators)
+    let parser = three(token_tree, operators_parser, token_tree)
+    use #(tokens, #(left, #(operator, _), right)) <- result.map(parser(tokens))
+    #(tokens, Node(operator, [left, right]))
   }
 }
 
-fn div(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  operator(common.Slash, Div)(tokens)
+fn mul_div(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
+  matched_operators([
+    #(Mul, token(common.Basic(common.Star))),
+    #(Div, token(common.Basic(common.Slash))),
+  ])(tokens)
 }
 
-fn mul(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  operator(common.Star, Mul)(tokens)
-}
-
-fn add(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  operator(common.Plus, Add)(tokens)
-}
-
-fn sub(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-  operator(common.Minus, Sub)(tokens)
+fn add_sub(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
+  matched_operators([
+    #(Add, token(common.Basic(common.Plus))),
+    #(Sub, token(common.Basic(common.Minus))),
+  ])(tokens)
 }
 
 fn token_leaf(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
@@ -208,18 +206,40 @@ fn prefix(pre: Parser(_), parser: Parser(a)) -> Parser(a) {
   }
 }
 
-fn infix(left: Parser(a), in: Parser(_), right: Parser(b)) -> Parser(#(a, b)) {
+fn one_of(parsers: List(#(a, Parser(b)))) -> Parser(#(a, b)) {
+  fn(tokens) { one_of_inner(parsers, tokens) }
+}
+
+fn one_of_inner(
+  parsers: List(#(a, Parser(b))),
+  tokens: Tokens,
+) -> Result(#(Tokens, #(a, b)), ParseError) {
+  case parsers {
+    [] -> Error(ExhaustedParsers)
+    [#(tag, parser), ..parsers] ->
+      case parser(tokens) {
+        Ok(#(tokens, item)) -> Ok(#(tokens, #(tag, item)))
+        _ -> one_of_inner(parsers, tokens)
+      }
+  }
+}
+
+fn three(
+  left: Parser(a),
+  middle: Parser(b),
+  right: Parser(c),
+) -> Parser(#(a, b, c)) {
   fn(tokens) {
     let last_parsed_at_result =
-      last_parsed_at(tokens, in, 0, Error(ExhaustedTokens))
+      last_parsed_at(tokens, middle, 0, Error(ExhaustedTokens))
     use parsed_at <- result.try(last_parsed_at_result)
     let left_tokens = list.take(tokens, parsed_at)
     let tokens = list.drop(tokens, parsed_at)
     use #(left_tokens, left) <- result.try(left(left_tokens))
     use <- bool.guard(left_tokens != [], Error(UnexpectedTokens))
-    use #(tokens, _) <- result.try(in(tokens))
+    use #(tokens, middle) <- result.try(middle(tokens))
     use #(tokens, right) <- result.try(right(tokens))
-    Ok(#(tokens, #(left, right)))
+    Ok(#(tokens, #(left, middle, right)))
   }
 }
 
