@@ -108,8 +108,10 @@ type Parser(in, out) =
 type TreesParser(a) =
   Parser(TokenTree(a), Trees(a))
 
+import gleam/io
+
 pub fn parse(tokens: Tokens) -> common.Return {
-  case do_parse(tokens) {
+  case do_parse(tokens) |> io.debug {
     Ok(tree) -> common.Return(out: token_tree_to_string(tree), error: "")
     Error(error) -> common.Return(out: "", error: parse_error_to_string(error))
   }
