@@ -64,17 +64,17 @@ type Grouped
 type Finished =
   Grouped
 
-type TokenTree(phase) {
-  Node(Node, List(TokenTree(phase)))
+type Tree(phase) {
+  Node(Node, List(Tree(phase)))
   Leaf(common.Token)
 }
 
-fn token_tree_to_string(tree: TokenTree(_)) -> String {
+fn tree_to_string(tree: Tree(_)) -> String {
   case tree {
     Node(node, trees) -> {
       let stringified =
         trees
-        |> list.map(token_tree_to_string)
+        |> list.map(tree_to_string)
         |> list.prepend(node_to_string(node))
         |> string.join(" ")
       "(" <> stringified <> ")"
@@ -84,7 +84,11 @@ fn token_tree_to_string(tree: TokenTree(_)) -> String {
 }
 
 type Trees(phase) =
-  List(TokenTree(phase))
+  List(Tree(phase))
+
+fn trees_to_string(trees: Trees(_)) -> String {
+  trees |> list.map(tree_to_string) |> string.join(" ")
+}
 
 type ParseError {
   ExhaustedInput
@@ -105,94 +109,95 @@ fn parse_error_to_string(error: ParseError) -> String {
 type Parser(in, out) =
   fn(List(in)) -> Result(#(List(in), out), ParseError)
 
-type TreesParser(a) =
-  Parser(TokenTree(a), Trees(a))
-
-import gleam/io
+type TreesParser(in, out) =
+  Parser(Tree(in), Trees(out))
 
 pub fn parse(tokens: Tokens) -> common.Return {
-  case do_parse(tokens) |> io.debug {
-    Ok(tree) -> common.Return(out: token_tree_to_string(tree), error: "")
+  case do_parse(tokens) {
+    Ok(trees) -> common.Return(out: trees_to_string(trees), error: "")
     Error(error) -> common.Return(out: "", error: parse_error_to_string(error))
   }
 }
 
-fn do_parse(tokens: Tokens) -> Result(TokenTree(Finished), ParseError) {
-  use #(tokens, flat_tree) <- result.try(flat_tree(tokens))
+import gleam/io
+
+fn do_parse(tokens: Tokens) -> Result(Trees(Finished), ParseError) {
+  use #(tokens, flat_trees) <- result.try(flat_trees(tokens))
   use <- bool.guard(tokens != [], Error(UnexpectedInput))
-  use grouped_tree <- result.try(traverse_token_tree(flat_tree, grouped))
+  use grouped_trees <- result.try(traverse_trees(flat_trees, grouped))
+  io.debug(grouped_trees)
   // use prefixes_tree <- result.try(prefixes_tree(grouped_tree))
   // use infixes_tree <- result.try(infixes_tree(prefixes_tree))
   // finished_tree(infixes_tree)
-  Ok(grouped_tree)
+  Ok(grouped_trees)
 }
 
-fn flat_tree(tokens: Tokens) -> Result(#(Tokens, TokenTree(Flat)), ParseError) {
-  tokens |> collect(token_leaf) |> result.map(pair.map_second(_, Node(Flat, _)))
+fn flat_trees(tokens: Tokens) -> Result(#(Tokens, Trees(Flat)), ParseError) {
+  collect(leaf)(tokens)
 }
 
 fn grouped(
-  trees: Trees(Grouped),
-) -> Result(#(Trees(Grouped), Trees(Grouped)), ParseError) {
-  let paren = fn(dir) { one(Leaf(common.Basic(common.Paren(dir)))) }
-  let group = enclosed(paren(common.Left), take_one, paren(common.Right))
-  let group_or_leaf = any([map(group, Node(Group, _)), take_one])
+  trees: Trees(Flat),
+) -> Result(#(Trees(Flat), Trees(Grouped)), ParseError) {
   collect(group_or_leaf)(trees)
 }
 
-// fn negate(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-//   let parser = prefix(token(common.Basic(common.Minus)), token_tree)
-//   use #(tokens, token_tree) <- result.map(parser(tokens))
-//   #(tokens, Node(Neg, [token_tree]))
-// }
+fn group(
+  trees: Trees(Flat),
+) -> Result(#(Trees(Flat), Trees(Grouped)), ParseError) {
+  let paren = fn(dir) { one(Leaf(common.Basic(common.Paren(dir)))) }
+  enclosed(paren(common.Left), group_or_leaf, paren(common.Right))(trees)
+}
 
-// fn not(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-//   let parser = prefix(token(common.Basic(common.Bang)), token_tree)
-//   use #(tokens, token_tree) <- result.map(parser(tokens))
-//   #(tokens, Node(Not, [token_tree]))
-// }
+fn group_or_leaf(
+  trees: Trees(Flat),
+) -> Result(#(Trees(Flat), Tree(Grouped)), ParseError) {
+  any([
+    map(group, Node(Group, _)),
+    map(take_one, fn(tree) {
+      case tree {
+        Leaf(token) -> Leaf(token)
+        _ -> panic as "trees should be Flat"
+      }
+    }),
+  ])(trees)
+}
 
-// fn matched_operators(
-//   operators: List(#(TreeType, Parser(_))),
-// ) -> Parser(TokenTree) {
-//   fn(tokens) {
-//     let operators_parser = one_of(operators)
-//     let parser = three(token_tree, operators_parser, token_tree)
-//     use #(tokens, #(left, #(operator, _), right)) <- result.map(parser(tokens))
-//     #(tokens, Node(operator, [left, right]))
-//   }
-// }
+fn traverse_trees(
+  trees: Trees(in),
+  parser: TreesParser(in, out),
+) -> Result(Trees(out), ParseError) {
+  do_traverse_trees(trees, parser, [])
+}
 
-// fn mul_div(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-//   matched_operators([
-//     #(Mul, token(common.Basic(common.Star))),
-//     #(Div, token(common.Basic(common.Slash))),
-//   ])(tokens)
-// }
+fn do_traverse_trees(
+  trees: Trees(in),
+  parser: TreesParser(in, out),
+  acc: Trees(out),
+) -> Result(Trees(out), ParseError) {
+  case trees {
+    [tree, ..trees] -> {
+      use tree <- result.try(traverse_tree(tree, parser))
+      do_traverse_trees(trees, parser, [tree, ..acc])
+    }
+    _ -> Ok(list.reverse(acc))
+  }
+}
 
-// fn add_sub(tokens: Tokens) -> Result(#(Tokens, TokenTree), ParseError) {
-//   matched_operators([
-//     #(Add, token(common.Basic(common.Plus))),
-//     #(Sub, token(common.Basic(common.Minus))),
-//   ])(tokens)
-// }
-
-fn traverse_token_tree(
-  tree: TokenTree(a),
-  parser: TreesParser(b),
-) -> Result(TokenTree(b), ParseError) {
+fn traverse_tree(
+  tree: Tree(in),
+  parser: TreesParser(in, out),
+) -> Result(Tree(out), ParseError) {
   case tree {
     Node(node, trees) ->
       trees
-      |> list.try_map(traverse_token_tree(_, parser))
-      |> result.try(parser)
-      |> result.map(pair.second)
+      |> traverse_trees(parser)
       |> result.map(Node(node, _))
     Leaf(token) -> Ok(Leaf(token))
   }
 }
 
-fn token_leaf(tokens: Tokens) -> Result(#(Tokens, TokenTree(Flat)), ParseError) {
+fn leaf(tokens: Tokens) -> Result(#(Tokens, Tree(Flat)), ParseError) {
   case tokens {
     [token, ..tokens] -> Ok(#(tokens, Leaf(token)))
     _ -> Error(ExhaustedInput)
@@ -312,41 +317,6 @@ fn map(
 //       case parser(in) {
 //         Ok(#(in, out)) -> Ok(#(in, #(tag, out)))
 //         _ -> one_of_inner(parsers, in)
-//       }
-//   }
-// }
-
-// fn three(
-//   left: Parser(a),
-//   middle: Parser(b),
-//   right: Parser(c),
-// ) -> Parser(#(a, b, c)) {
-//   fn(tokens) {
-//     let last_parsed_at_result =
-//       last_parsed_at(tokens, middle, 0, Error(ExhaustedTokens))
-//     use parsed_at <- result.try(last_parsed_at_result)
-//     let left_tokens = list.take(tokens, parsed_at)
-//     let tokens = list.drop(tokens, parsed_at)
-//     use #(left_tokens, left) <- result.try(left(left_tokens))
-//     use <- bool.guard(left_tokens != [], Error(UnexpectedTokens))
-//     use #(tokens, middle) <- result.try(middle(tokens))
-//     use #(tokens, right) <- result.try(right(tokens))
-//     Ok(#(tokens, #(left, middle, right)))
-//   }
-// }
-
-// fn last_parsed_at(
-//   tokens: Tokens,
-//   parser: Parser(_),
-//   i: Int,
-//   acc: Result(Int, ParseError),
-// ) -> Result(Int, ParseError) {
-//   case parser(tokens) {
-//     Ok(_) -> last_parsed_at(list.drop(tokens, 1), parser, i + 1, Ok(i))
-//     _ ->
-//       case tokens {
-//         [] -> acc
-//         [_, ..tokens] -> last_parsed_at(tokens, parser, i + 1, acc)
 //       }
 //   }
 // }
