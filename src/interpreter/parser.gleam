@@ -195,7 +195,9 @@ fn prefix(pre: Parser(_), parser: Parser(a)) -> Parser(a) {
 
 fn infix(left: Parser(a), in: Parser(_), right: Parser(b)) -> Parser(#(a, b)) {
   fn(tokens) {
-    use parsed_at <- result.try(parsed_at(tokens, in, Ok(0)))
+    let last_parsed_at_result =
+      last_parsed_at(tokens, in, 0, Error(ExhaustedTokens))
+    use parsed_at <- result.try(last_parsed_at_result)
     let left_tokens = list.take(tokens, parsed_at)
     let tokens = list.drop(tokens, parsed_at)
     use #(left_tokens, left) <- result.try(left(left_tokens))
@@ -206,18 +208,18 @@ fn infix(left: Parser(a), in: Parser(_), right: Parser(b)) -> Parser(#(a, b)) {
   }
 }
 
-fn parsed_at(
+fn last_parsed_at(
   tokens: Tokens,
   parser: Parser(_),
+  i: Int,
   acc: Result(Int, ParseError),
 ) -> Result(Int, ParseError) {
   case parser(tokens) {
-    Ok(_) -> acc
+    Ok(_) -> last_parsed_at(list.drop(tokens, 1), parser, i + 1, Ok(i))
     _ ->
       case tokens {
-        [] -> Error(ExhaustedTokens)
-        [_, ..tokens] ->
-          parsed_at(tokens, parser, result.map(acc, fn(acc) { acc + 1 }))
+        [] -> acc
+        [_, ..tokens] -> last_parsed_at(tokens, parser, i + 1, acc)
       }
   }
 }
