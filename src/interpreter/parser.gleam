@@ -1,5 +1,6 @@
 import interpreter/common
 
+import gleam/float
 import gleam/list
 import gleam/pair
 import gleam/result
@@ -8,7 +9,9 @@ import gleam/string
 fn token_to_string(token: common.Token) -> String {
   case token {
     common.Ident(ident) -> ident
-    common.Literal(_, lexeme) | common.Keyword(_, lexeme) -> lexeme
+    common.Literal(common.LiteralString, lexeme) | common.Keyword(_, lexeme) ->
+      lexeme
+    common.Literal(common.LiteralNumber(number), _) -> float.to_string(number)
     common.Comment -> ""
     common.Basic(basic_token) -> common.basic_token_to_pattern(basic_token)
   }
