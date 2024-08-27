@@ -1,4 +1,5 @@
 import gleam/bool
+import gleam/function
 import interpreter/common
 
 import gleam/float
@@ -53,23 +54,12 @@ fn node_to_string(node: Node) -> String {
   }
 }
 
-type Flat
-
-type Grouped
-
-// type Prefixes
-
-// type Infixes
-
-type Finished =
-  Grouped
-
-type Tree(phase) {
-  Node(Node, List(Tree(phase)))
+type Tree {
+  Node(Node, List(Tree))
   Leaf(common.Token)
 }
 
-fn tree_to_string(tree: Tree(_)) -> String {
+fn tree_to_string(tree: Tree) -> String {
   case tree {
     Node(node, trees) -> {
       let stringified =
@@ -83,10 +73,10 @@ fn tree_to_string(tree: Tree(_)) -> String {
   }
 }
 
-type Trees(phase) =
-  List(Tree(phase))
+type Trees =
+  List(Tree)
 
-fn trees_to_string(trees: Trees(_)) -> String {
+fn trees_to_string(trees: Trees) -> String {
   trees |> list.map(tree_to_string) |> string.join(" ")
 }
 
@@ -116,65 +106,95 @@ pub fn parse(tokens: Tokens) -> common.Return {
   }
 }
 
-fn do_parse(tokens: Tokens) -> Result(Trees(Finished), ParseError) {
-  use #(tokens, flat_trees) <- result.try(flat_trees(tokens))
+fn do_parse(tokens: Tokens) -> Result(Trees, ParseError) {
+  use #(tokens, flat) <- result.try(flat(tokens))
   use <- bool.guard(tokens != [], Error(UnexpectedInput))
-  use #(flat_trees, grouped_trees) <- result.try(grouped_trees(flat_trees))
-  use <- bool.guard(flat_trees != [], Error(UnexpectedInput))
-  Ok(grouped_trees)
+  use #(flat, grouped) <- result.try(traverse_trees(grouped)(flat))
+  use <- bool.guard(flat != [], Error(UnexpectedInput))
+  use #(grouped, prefixed) <- result.try(traverse_trees(prefixed)(grouped))
+  use <- bool.guard(grouped != [], Error(UnexpectedInput))
+  Ok(prefixed)
 }
 
-fn flat_trees(tokens: Tokens) -> Result(#(Tokens, Trees(Flat)), ParseError) {
+fn flat(tokens: Tokens) -> Result(#(Tokens, Trees), ParseError) {
   collect(leaf)(tokens)
 }
 
-fn grouped_trees(
-  trees: Trees(Flat),
-) -> Result(#(Trees(Flat), Trees(Grouped)), ParseError) {
-  collect(group_or_leaf)(trees)
-}
-
-fn group(
-  trees: Trees(Flat),
-) -> Result(#(Trees(Flat), Trees(Grouped)), ParseError) {
-  let paren = fn(dir) { one(Leaf(common.Basic(common.Paren(dir)))) }
-  enclosed(paren(common.Left), group_or_leaf, paren(common.Right))(trees)
-}
-
-fn group_or_leaf(
-  trees: Trees(Flat),
-) -> Result(#(Trees(Flat), Tree(Grouped)), ParseError) {
+fn grouped(trees: Trees) -> Result(#(Trees, Tree), ParseError) {
   any([
-    map(group, Node(Group, _)),
+    map(parens, Node(Group, _)),
     map(take_one, fn(tree) {
       case tree {
         Leaf(token) -> Leaf(token)
-        _ -> panic as "trees should be Flat"
+        _ -> panic
       }
     }),
   ])(trees)
 }
 
-fn traverse_tree(
-  parser: Parser(Tree(in), Trees(out)),
-) -> Parser(Tree(in), Tree(out)) {
-  fn(trees) {
-    use #(trees, tree) <- result.try(take_one(trees))
-    case tree {
-      Node(node, in) -> {
-        use #(in, out) <- result.try(parser(in))
-        use <- bool.guard(in != [], Error(UnexpectedInput))
-        Ok(#(trees, Node(node, out)))
+fn parens(trees: Trees) -> Result(#(Trees, Trees), ParseError) {
+  let paren = fn(dir) { one(Leaf(common.Basic(common.Paren(dir)))) }
+  enclosed(paren(common.Left), grouped, paren(common.Right))(trees)
+}
+
+fn prefixed(trees: Trees) -> Result(#(Trees, Tree), ParseError) {
+  let prefix = fn(basic) { prefix(one(Leaf(common.Basic(basic))), take(1)) }
+  let #(not, neg) = #(prefix(common.Bang), prefix(common.Minus))
+  any([map(not, Node(Prefix(Not), _)), map(neg, Node(Prefix(Neg), _))])(trees)
+}
+
+fn traverse_trees(parser: Parser(Tree, Tree)) -> Parser(Tree, Trees) {
+  fn(in) {
+    let parser =
+      parser
+      |> maybe
+      |> recover
+      |> collect
+      |> map(list.filter_map(_, function.identity))
+    let traverse = fn(trees) {
+      use #(trees, tree) <- result.try(take_one(trees))
+      case tree {
+        Node(node, in) -> {
+          use #(_, out) <- result.try(parser(in))
+          Ok(#(trees, Node(node, out)))
+        }
+        Leaf(token) -> Ok(#(trees, Leaf(token)))
       }
-      Leaf(token) -> Ok(#(trees, Leaf(token)))
+    }
+    use #(in, out) <- result.try(collect(traverse)(in))
+    use #(trees, converted) <- result.try(parser(out))
+    use <- bool.guard(trees != [], Error(UnexpectedInput))
+    Ok(#(in, converted))
+  }
+}
+
+fn leaf(tokens: Tokens) -> Result(#(Tokens, Tree), ParseError) {
+  case tokens {
+    [token, ..tokens] -> Ok(#(tokens, Leaf(token)))
+    _ -> Error(ExhaustedInput)
+  }
+}
+
+fn maybe(parser: Parser(in, out)) -> Parser(in, Result(out, Nil)) {
+  fn(in) {
+    case parser(in) {
+      Ok(#(in, out)) -> Ok(#(in, Ok(out)))
+      _ -> Ok(#(in, Error(Nil)))
     }
   }
 }
 
-fn leaf(tokens: Tokens) -> Result(#(Tokens, Tree(Flat)), ParseError) {
-  case tokens {
-    [token, ..tokens] -> Ok(#(tokens, Leaf(token)))
-    _ -> Error(ExhaustedInput)
+fn recover(parser: Parser(in, Result(out, e))) -> Parser(in, Result(out, e)) {
+  fn(in) {
+    use #(in, res) <- result.try(parser(in))
+    case res {
+      Ok(_) -> Ok(#(in, res))
+      _ ->
+        case in {
+          [_, ..in] -> Ok(#(in, res))
+          _ -> Error(ExhaustedInput)
+        }
+    }
   }
 }
 
@@ -270,13 +290,13 @@ fn map(
     #(in, f(out))
   }
 }
-// fn prefix(pre: Parser(in, _), parser: Parser(in, out)) -> Parser(in, out) {
-//   fn(in) {
-//     use #(in, _) <- result.try(pre(in))
-//     parser(in)
-//   }
-// }
 
+fn prefix(pre: Parser(in, _), parser: Parser(in, out)) -> Parser(in, out) {
+  fn(in) {
+    use #(in, _) <- result.try(pre(in))
+    parser(in)
+  }
+}
 // fn one_of(parsers: List(#(tag, Parser(in, out)))) -> Parser(in, #(tag, out)) {
 //   fn(in) { one_of_inner(parsers, in) }
 // }
